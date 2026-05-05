@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Bible source files (downloaded, not committed)
+backend/data/bibles/*
+!backend/data/bibles/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Frontend (Phase 1+)
+node_modules/
+.next/
+out/

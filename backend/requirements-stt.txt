@@ -1,0 +1,10 @@
+-r requirements.txt
+# Heavy STT deps. Install separately because they pull in a CUDA-capable
+# CTranslate2 and torch (for Silero VAD). Skip these on machines that
+# only run the API / parser / auth layers.
+sounddevice==0.5.1
+faster-whisper==1.1.0
+silero-vad==5.1.2
+# faster-whisper 1.1 still uses `requests` for downloading mel filter
+# definitions, but huggingface_hub 1.x dropped it as a hard dep.
+requests>=2.31
