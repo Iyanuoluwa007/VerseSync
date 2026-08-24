@@ -19,16 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE ON BUNDLED BIBLE TEXTS
-
-This MIT license covers the VerseSync SOURCE CODE only. The Bible
-translations VerseSync downloads and ingests are separately licensed and
-are NOT covered by this license. In particular the Yoruba translation is
-licensed CC BY-SA 4.0 and carries a trademark requirement.
-
-No Bible text is committed to this repository; the download script fetches
-it from eBible.org at install time. See LICENSES.md for the full notices
-that apply to each translation.

@@ -1,8 +1,33 @@
-# Bundled Bible Translations — License Notices
+# License Notices
 
-VerseSync bundles three Bible translations with the application data.
-This file documents their copyright and licensing status, as required
-by their respective licenses.
+## Scope
+
+VerseSync has two kinds of content under two different licenses.
+
+| What | License | Where |
+| ---- | ------- | ----- |
+| **Source code** (everything in this repository) | MIT | [`LICENSE`](LICENSE) |
+| **Bible translations** (downloaded at install time) | Varies per translation, see below | Not in this repository |
+
+The MIT license in `LICENSE` covers the **source code only**. It does
+not, and cannot, grant you any rights over the Bible texts. Those are
+separately licensed by their respective copyright holders, and one of
+them (Yoruba) is copyleft with a trademark condition.
+
+No Bible text is committed to this repository. `scripts/download_bibles.py`
+fetches each translation from eBible.org at install time, so the text
+travels from its source under its own license rather than being
+redistributed by this project.
+
+If you fork VerseSync, the MIT terms are all you need for the code. If
+you redistribute an installation that includes the ingested database,
+the notices below apply to you as well.
+
+---
+
+## Bundled Bible translations
+
+The three translations VerseSync installs, and their licensing status.
 
 ---
 
