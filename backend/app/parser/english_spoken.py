@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import re
 
-
 # "from verse N to/through M" -> "N-M"
 _FROM_VERSE_RANGE_RX = re.compile(
     r"\bfrom\s+verses?\s+(\d{1,3})\s+(?:to|through|until|thru)\s+(\d{1,3})\b",
@@ -101,6 +100,4 @@ def looks_english_spoken(text: str) -> bool:
         return True
     # Two adjacent <=3-digit numbers separated by space and preceded by
     # a word -- the spoken "Book N M" form.
-    if re.search(r"\b[a-z]{2,}\s+\d{1,3}\s+\d{1,3}\b", lower):
-        return True
-    return False
+    return bool(re.search("\\b[a-z]{2,}\\s+\\d{1,3}\\s+\\d{1,3}\\b", lower))

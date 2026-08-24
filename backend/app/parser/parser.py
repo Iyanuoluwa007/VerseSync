@@ -12,17 +12,17 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 from app.bible.books import is_valid_chapter
 from app.parser import llm as llm_module
+from app.parser.english_spoken import normalize_english_spoken
 from app.parser.lexicon import find_book_in_text
 from app.parser.numbers import (
-    ALL_NUMBER_WORDS, words_to_digits,
+    ALL_NUMBER_WORDS,
+    words_to_digits,
 )
 from app.parser.types import ParseContext, ParsedRef
 from app.parser.yoruba import looks_yoruba, normalize_yoruba
-from app.parser.english_spoken import normalize_english_spoken
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +79,8 @@ def _strip_filler(text: str) -> str:
 
 
 def _build_ref_if_valid(book: str, chapter: int, verse_start: int,
-                        verse_end: Optional[int], source: str,
-                        confidence: float) -> Optional[ParsedRef]:
+                        verse_end: int | None, source: str,
+                        confidence: float) -> ParsedRef | None:
     """Build a ParsedRef but return None if (book, chapter) is invalid.
 
     This guards against Whisper-induced nonsense like 'Matt255' parsing
@@ -105,7 +105,7 @@ def _build_ref_if_valid(book: str, chapter: int, verse_start: int,
     )
 
 
-def _try_regex(text: str, source_label: str) -> Optional[ParsedRef]:
+def _try_regex(text: str, source_label: str) -> ParsedRef | None:
     """Run the book + chapter:verse regex on `text`. Assumes numbers
     are in digit form already."""
     lower = text.lower()
@@ -169,7 +169,7 @@ def _try_regex(text: str, source_label: str) -> Optional[ParsedRef]:
     )
 
 
-def _try_context(text: str, ctx: ParseContext) -> Optional[ParsedRef]:
+def _try_context(text: str, ctx: ParseContext) -> ParsedRef | None:
     """Resolve stateful references against the last cited verse."""
     if ctx.last_book is None or ctx.last_chapter is None:
         return None
@@ -232,10 +232,10 @@ def _try_context(text: str, ctx: ParseContext) -> Optional[ParsedRef]:
 
 def parse(
     text: str,
-    context: Optional[ParseContext] = None,
+    context: ParseContext | None = None,
     *,
     use_llm: bool = True,
-) -> Optional[ParsedRef]:
+) -> ParsedRef | None:
     """Parse a single Bible reference from `text`. Returns None if nothing found.
 
     If `context` is provided and `text` resolves to a stateful reference

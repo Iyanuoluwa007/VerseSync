@@ -10,8 +10,6 @@ but we CAN test:
 """
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.parser.types import ParseContext
 from app.stt.pipeline import Detection, STTPipeline
 

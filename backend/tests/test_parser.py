@@ -26,7 +26,7 @@ def _expect(inp: str, expected: str | None):
     else:
         assert ref is not None, f"expected {expected} for {inp!r}, got None"
         assert str(ref) == expected, (
-            f"for {inp!r}: expected {expected}, got {str(ref)}"
+            f"for {inp!r}: expected {expected}, got {ref!s}"
         )
 
 

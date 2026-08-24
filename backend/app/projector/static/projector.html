@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VerseSync Projector</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/projector/static/projector.css" />
+  </head>
+  <body data-theme="lowerthird" data-bg="transparent">
+    <div id="status" data-state="connecting">connecting...</div>
+
+    <div id="stage">
+      <div id="card">
+        <div id="reference">
+          <span id="reference-text"></span>
+          <span id="translation"></span>
+        </div>
+        <ol id="verses"></ol>
+      </div>
+    </div>
+
+    <script>
+      // Server-rendered defaults, so the page needs no extra round trip
+      // before it can draw. Query-string parameters override these.
+      window.VERSESYNC_DEFAULTS = __VERSESYNC_DEFAULTS__;
+    </script>
+    <script src="/projector/static/projector.js"></script>
+  </body>
+</html>

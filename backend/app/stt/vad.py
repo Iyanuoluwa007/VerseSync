@@ -25,7 +25,6 @@ log it for diagnostics.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import numpy as np
 
@@ -46,6 +45,48 @@ DEFAULT_SPEECH_PAD_MS = 200
 WINDOW_SAMPLES_16K = 512
 
 
+class _ProbeModel:
+    """Transparent proxy around the Silero model that records probabilities.
+
+    `VADIterator` calls `model(chunk, sampling_rate)` exactly once per
+    chunk. By handing it this proxy instead of the raw model we capture
+    the true speech probability for diagnostics **without running a
+    second inference**.
+
+    That matters for correctness, not just speed: the Silero streaming
+    model is a stateful RNN. The previous implementation called the model
+    a second time on the same chunk to read the probability, which both
+    doubled the VAD cost per chunk and advanced the hidden state twice
+    per 32 ms of audio, desynchronising the state VADIterator relies on
+    to decide where speech starts and ends.
+    """
+
+    __slots__ = ("_model", "last_probability")
+
+    def __init__(self, model):
+        self._model = model
+        self.last_probability: float = 0.0
+
+    def __call__(self, x, sample_rate):
+        out = self._model(x, sample_rate)
+        try:
+            self.last_probability = float(out.item())
+        except Exception:  # pragma: no cover - defensive, shape surprises
+            self.last_probability = 0.0
+        return out
+
+    def reset_states(self) -> None:
+        self.last_probability = 0.0
+        reset = getattr(self._model, "reset_states", None)
+        if reset is not None:
+            reset()
+
+    def __getattr__(self, name):
+        # Anything VADIterator or the caller needs that we do not
+        # override (audio_forward, eval, etc.) passes straight through.
+        return getattr(self._model, name)
+
+
 class SpeechDetector:
     """Streaming wrapper around silero_vad.VADIterator.
 
@@ -58,10 +99,14 @@ class SpeechDetector:
                  min_silence_ms: int = DEFAULT_MIN_SILENCE_MS,
                  speech_pad_ms: int = DEFAULT_SPEECH_PAD_MS,
                  sample_rate: int = 16000):
-        # Lazy import -- Silero loads ONNX runtime on first use (~50ms).
-        from silero_vad import load_silero_vad, VADIterator
+        # Lazy imports -- Silero loads the ONNX runtime on first use
+        # (~50 ms) and torch is a heavy import. Neither should be paid
+        # for by deployments that never start the STT pipeline.
+        import torch
+        from silero_vad import VADIterator, load_silero_vad
 
-        self._model = load_silero_vad()
+        self._torch = torch
+        self._model = _ProbeModel(load_silero_vad())
         self._VADIterator = VADIterator
         self.threshold = threshold
         self.min_silence_ms = min_silence_ms
@@ -97,7 +142,7 @@ class SpeechDetector:
         self._chunks_seen = 0
         self._in_speech = False
 
-    def process(self, chunk: np.ndarray) -> Optional[str]:
+    def process(self, chunk: np.ndarray) -> str | None:
         """Feed one 512-sample float32 chunk; return "start" / "end" / None.
 
         VADIterator returns:
@@ -105,7 +150,6 @@ class SpeechDetector:
             {'end':   sec}  when speech ends   (after min_silence)
             None            otherwise
         """
-        import torch
         self._chunks_seen += 1
 
         if chunk.shape[0] != WINDOW_SAMPLES_16K:
@@ -117,7 +161,7 @@ class SpeechDetector:
                                dtype=np.float32)
                 chunk = np.concatenate([chunk, pad])
 
-        tensor = torch.from_numpy(chunk).float()
+        tensor = self._torch.from_numpy(chunk).float()
 
         try:
             event_dict = self._iter(tensor, return_seconds=False)
@@ -125,22 +169,9 @@ class SpeechDetector:
             logger.warning("VADIterator error: %s", exc)
             return None
 
-        # Pull the model's last computed probability for diagnostics.
-        # VADIterator exposes it as a Tensor attribute on internal state
-        # in 5.1.x; fall back to a fresh model call if unavailable.
-        prob = getattr(self._iter, "last_speech_prob", None)
-        if prob is None:
-            try:
-                with torch.no_grad():
-                    prob = float(self._model(tensor, self.sample_rate).item())
-            except Exception:
-                prob = 0.0
-        else:
-            try:
-                prob = float(prob)
-            except Exception:
-                prob = 0.0
-        self._last_probability = prob
+        # The probe recorded the probability during the call above --
+        # no second inference, no extra state advance.
+        self._last_probability = self._model.last_probability
 
         if not event_dict:
             return None

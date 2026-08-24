@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # VerseSync is developed on Windows and deployed next to OBS,
+        # which is cross-platform; both are covered here.
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12", "3.13"]
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint
+        working-directory: .
+        run: ruff check .
+
+      - name: Test
+        # No Bible database is present in CI. The suite must pass without
+        # one -- every test that needs verses builds its own temporary DB.
+        run: pytest -v
+
+  import-check:
+    # The API must start without the optional STT stack installed. This
+    # is the "projector-only" deployment profile, which is how VerseSync
+    # runs on a machine that just drives an OBS overlay.
+    name: import without STT extras
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: App imports and serves health without faster-whisper
+        run: |
+          python - <<'PY'
+          from fastapi.testclient import TestClient
+          from app.main import app
+
+          with TestClient(app) as client:
+              assert client.get("/healthz").status_code == 200
+              assert client.get("/projector").status_code == 200
+              assert client.get("/obs/status").status_code == 200
+          print("projector-only profile OK")
+          PY
+
+  secret-scan:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Look for committed credentials
+        run: |
+          set -o pipefail
+          pattern='(gsk_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{50,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----)'
+          if git grep -nEI "$pattern" -- . ':!*.md'; then
+            echo "::error::Possible credential committed. Rotate it, then remove it from history."
+            exit 1
+          fi
+          echo "No credential patterns found."
+      - name: Ensure no .env file is tracked
+        run: |
+          if git ls-files --error-unmatch '**/.env' 2>/dev/null; then
+            echo "::error::A .env file is tracked. It must be gitignored."
+            exit 1
+          fi
+          echo "No tracked .env files."

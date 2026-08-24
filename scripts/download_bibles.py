@@ -12,13 +12,13 @@ from __future__ import annotations
 import argparse
 import sys
 import urllib.request
-from pathlib import Path
 
-# Make backend/ importable when run from repo root or backend/
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+# Adds backend/ to sys.path and forces UTF-8 console output so
+# Yoruba scripture can be printed on a default Windows console.
+from _bootstrap import ROOT  # noqa: F401  (import for side effects)
 
-from app.bible.ingest import TRANSLATIONS  # noqa: E402
-from app.core.config import settings  # noqa: E402
+from app.bible.ingest import TRANSLATIONS
+from app.core.config import settings
 
 
 def main() -> int:

@@ -12,7 +12,7 @@ POST /parse-and-fetch
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -26,18 +26,18 @@ router = APIRouter(tags=["parser"])
 
 
 class ParseContextIn(BaseModel):
-    last_book: Optional[str] = None
-    last_chapter: Optional[int] = None
-    last_verse_end: Optional[int] = None
+    last_book: str | None = None
+    last_chapter: int | None = None
+    last_verse_end: int | None = None
 
 
 class ParseRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=2000)
-    context: Optional[ParseContextIn] = None
+    context: ParseContextIn | None = None
     use_llm: bool = True
 
 
-def _to_context(c: Optional[ParseContextIn]) -> Optional[ParseContext]:
+def _to_context(c: ParseContextIn | None) -> ParseContext | None:
     if c is None:
         return None
     return ParseContext(

@@ -1,0 +1,34 @@
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+extend-exclude = ["venv", ".venv", "backend/data"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "I",    # import sorting
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "SIM",  # simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",    # line length is handled by review, not the linter
+    "B008",    # FastAPI's Depends()/Query() defaults are the framework idiom
+    "SIM105",  # contextlib.suppress is not clearer than a narrow try/except here
+    "RUF001",  # Yoruba text legitimately contains characters that look ambiguous
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into private helpers on purpose to pin internal contracts.
+"backend/tests/*" = ["SIM117"]
+# The scripts import _bootstrap for its side effects before anything else.
+"scripts/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

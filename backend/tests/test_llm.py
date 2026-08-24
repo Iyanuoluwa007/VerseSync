@@ -1,10 +1,9 @@
 """Unit tests for the LLM fallback. Uses a mock for Groq so no
 network calls are made."""
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.parser import llm as llm_module
 from app.parser.llm import _coerce_response
-
 
 # ---- _coerce_response ----
 

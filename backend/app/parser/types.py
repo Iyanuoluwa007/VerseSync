@@ -7,7 +7,7 @@ style follow-up references.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal
 
 # Where in the pipeline a parse came from. Useful for analytics and for
 # the API to flag low-confidence results.
@@ -24,13 +24,25 @@ class ParsedRef:
     book: str                    # USFM 3-letter, e.g. "JHN"
     chapter: int
     verse_start: int
-    verse_end: Optional[int]     # None = single verse, else inclusive end
+    verse_end: int | None     # None = single verse, else inclusive end
     source: ParseSource
     confidence: float            # 0.0..1.0
+
+    @property
+    def book_name(self) -> str:
+        """English book name, e.g. "John" for "JHN".
+
+        The projector shows this rather than the USFM code: a
+        congregation should never be shown "JHN 3:16".
+        """
+        from app.bible.books import BY_CODE
+        book = BY_CODE.get(self.book)
+        return book.name_en if book else self.book
 
     def to_dict(self) -> dict:
         return {
             "book": self.book,
+            "book_name": self.book_name,
             "chapter": self.chapter,
             "verse_start": self.verse_start,
             "verse_end": self.verse_end,
@@ -52,9 +64,9 @@ class ParseContext:
     every successful parse so follow-ups like "the next chapter" can
     resolve.
     """
-    last_book: Optional[str] = None
-    last_chapter: Optional[int] = None
-    last_verse_end: Optional[int] = None
+    last_book: str | None = None
+    last_chapter: int | None = None
+    last_verse_end: int | None = None
 
     def update(self, ref: ParsedRef) -> None:
         self.last_book = ref.book

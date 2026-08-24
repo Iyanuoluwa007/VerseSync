@@ -7,10 +7,11 @@ from __future__ import annotations
 import re
 import sqlite3
 import zipfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.bible.books import BY_CODE
+from app.bible.db import transaction
 from app.bible.usfm import parse_usfm
 
 # Translation registry. Keep license + copyright strings here so they
@@ -68,6 +69,21 @@ def ingest_translation(
     if not zip_path.exists():
         raise FileNotFoundError(f"USFM zip not found: {zip_path}")
 
+    # The whole ingest runs as ONE transaction. In autocommit mode SQLite
+    # commits and fsyncs per statement, so this is both far faster and
+    # atomic -- an interrupted run can no longer leave a translations row
+    # claiming an installed Bible whose verses are only half loaded.
+    with transaction(conn):
+        return _ingest_locked(conn, code, meta, zip_path)
+
+
+def _ingest_locked(
+    conn: sqlite3.Connection,
+    code: str,
+    meta: dict,
+    zip_path: Path,
+) -> dict:
+    """Body of `ingest_translation`, run inside an open transaction."""
     # 1. Upsert the translations row
     conn.execute(
         """INSERT INTO translations
@@ -82,7 +98,7 @@ def ingest_translation(
              ingested_at = excluded.ingested_at""",
         (code, meta["name"], meta["language"], meta["license"],
          meta["copyright"], meta["source_url"],
-         datetime.now(timezone.utc).isoformat()),
+         datetime.now(UTC).isoformat()),
     )
 
     # 2. Wipe any existing verses for this translation

@@ -20,7 +20,6 @@ LLM fallback, which Llama 3.3 understands well enough for our purposes.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 ONES: dict[str, int] = {
     "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4,
@@ -71,7 +70,7 @@ def _can_extend(phrase: list[str], next_tok: str) -> bool:
     return False
 
 
-def _evaluate(phrase: list[str]) -> Optional[int]:
+def _evaluate(phrase: list[str]) -> int | None:
     """Resolve a list of tokens to a single integer."""
     if not phrase:
         return None
@@ -98,7 +97,7 @@ def _evaluate(phrase: list[str]) -> Optional[int]:
     return total + current
 
 
-def parse_number(text: str) -> Optional[int]:
+def parse_number(text: str) -> int | None:
     """Parse a single spoken or written number. Returns None on failure."""
     text = text.strip().lower().replace("-", " ")
     if not text:

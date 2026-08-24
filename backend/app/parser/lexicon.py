@@ -20,8 +20,7 @@ import sqlite3
 from dataclasses import dataclass
 from functools import lru_cache
 
-from app.bible.db import connect
-
+from app.core.config import settings
 
 # --- English base names + abbreviations ---
 # (USFM_code, canonical_english, [abbrevs/aliases without ordinal prefix],
@@ -169,7 +168,7 @@ def _generate_patterns_for_book(
     code: str, canonical: str, abbrevs: list[str], ordinal: int | None,
 ) -> list[str]:
     """All English patterns for one book entry."""
-    base_forms = [canonical] + list(abbrevs)
+    base_forms = [canonical, *list(abbrevs)]
     base_forms = [b.lower() for b in base_forms]
     if ordinal is None:
         return base_forms
@@ -182,6 +181,35 @@ def _generate_patterns_for_book(
             if prefix in {"1", "2", "3"}:
                 out.append(f"{prefix}{base}")
     return out
+
+
+def _yoruba_names_from_db() -> dict[str, str]:
+    """Read Yoruba book names from the DB, if one has been ingested.
+
+    Returns an empty mapping when the database does not exist yet. We
+    deliberately do NOT call `connect()` here: that would run the schema
+    bootstrap and create an empty `versesync.db` as a side effect of
+    merely parsing a reference. Building the lexicon is a read.
+    """
+    if not settings.db_path.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(f"file:{settings.db_path}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return {}
+    try:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT code, name_yo FROM books WHERE name_yo IS NOT NULL"
+        ).fetchall()
+        return {r["code"]: r["name_yo"].strip()
+                for r in rows if r["name_yo"] and r["name_yo"].strip()}
+    except sqlite3.Error:
+        # Table missing or schema older than this build -- the static
+        # fallback names are perfectly usable on their own.
+        return {}
+    finally:
+        conn.close()
 
 
 @lru_cache(maxsize=1)
@@ -205,19 +233,7 @@ def _build_lexicon() -> tuple[tuple[str, BookMatch], ...]:
     # any DB; if the YOR translation has been ingested, those values
     # override (they could differ for future translations).
     yoruba_map: dict[str, str] = dict(_YORUBA_BOOK_NAMES)
-    try:
-        conn = connect()
-        try:
-            rows = conn.execute(
-                "SELECT code, name_yo FROM books WHERE name_yo IS NOT NULL"
-            ).fetchall()
-            for r in rows:
-                yoruba_map[r["code"]] = r["name_yo"].strip()
-        finally:
-            conn.close()
-    except Exception:
-        # DB not initialised; static names alone are fine.
-        pass
+    yoruba_map.update(_yoruba_names_from_db())
 
     for code, name_yo in yoruba_map.items():
         entries.append((name_yo.lower(), BookMatch(code, name_yo.lower(), 1.0)))
@@ -246,23 +262,57 @@ def _strip_diacritics(s: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
+@lru_cache(maxsize=1)
+def _compiled_lexicon() -> tuple[re.Pattern[str], dict[str, BookMatch]]:
+    """Compile the whole lexicon into ONE alternation regex.
+
+    The previous implementation compiled and ran a separate regex for
+    each of the 653 patterns on every call, so a line of speech with no
+    book name in it -- by far the common case during a sermon -- cost
+    653 full scans of the text. That was the parser's dominant expense.
+
+    Alternatives are ordered longest-first, which makes Python's
+    leftmost-first alternation prefer the longest book name starting at
+    any given position ("first john" wins over "john"). We then scan
+    every match in the line and keep the longest, preserving the old
+    "longest pattern anywhere in the text" contract.
+    """
+    lex = _build_lexicon()
+    # `lex` is already sorted longest-pattern-first, and for a duplicated
+    # pattern its first entry is the one the old linear scan would have
+    # returned, so setdefault reproduces the old resolution order exactly.
+    table: dict[str, BookMatch] = {}
+    for pattern, match in lex:
+        table.setdefault(pattern, match)
+
+    alternation = "|".join(re.escape(p) for p, _ in lex)
+    rx = re.compile(rf"(?<![a-z])(?:{alternation})(?![a-z])")
+    return rx, table
+
+
 def find_book_in_text(text: str) -> tuple[BookMatch, int, int] | None:
     """Find the longest book pattern matching anywhere in `text`.
 
     Returns (BookMatch, start_idx, end_idx) on hit, None otherwise.
     `text` is expected to already be lowercased.
     """
-    lex = _build_lexicon()
-    for pattern, match in lex:
-        # Word-boundary match. We use a regex with explicit \b plus
-        # protection against partial book-name matches inside other words.
-        rx = re.compile(rf"(?<![a-z]){re.escape(pattern)}(?![a-z])")
-        m = rx.search(text)
-        if m:
-            return match, m.start(), m.end()
-    return None
+    rx, table = _compiled_lexicon()
+
+    best: tuple[BookMatch, int, int] | None = None
+    best_len = 0
+    for m in rx.finditer(text):
+        length = m.end() - m.start()
+        if length <= best_len:
+            continue
+        entry = table.get(m.group(0))
+        if entry is None:  # pragma: no cover - table covers every pattern
+            continue
+        best = (entry, m.start(), m.end())
+        best_len = length
+    return best
 
 
 def reset_cache() -> None:
-    """For tests that change the DB between runs."""
+    """Rebuild the lexicon. For tests that change the DB between runs."""
     _build_lexicon.cache_clear()
+    _compiled_lexicon.cache_clear()

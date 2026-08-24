@@ -12,13 +12,14 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+# Adds backend/ to sys.path and forces UTF-8 console output so
+# Yoruba scripture can be printed on a default Windows console.
+from _bootstrap import ROOT  # noqa: F401  (import for side effects)
 
-from app.bible.db import connect, seed_books  # noqa: E402
-from app.bible.ingest import TRANSLATIONS, ingest_translation  # noqa: E402
-from app.core.config import settings  # noqa: E402
+from app.bible.db import connect, seed_books
+from app.bible.ingest import TRANSLATIONS, ingest_translation
+from app.core.config import settings
 
 
 def main() -> int:
@@ -31,7 +32,7 @@ def main() -> int:
     print(f"[*] DB: {settings.db_path}")
     conn = connect()
     seed_books(conn)
-    print(f"[OK] Books table seeded (66 entries)")
+    print("[OK] Books table seeded (66 entries)")
 
     targets = args.only or list(TRANSLATIONS.keys())
     grand_total = 0

@@ -31,8 +31,8 @@ import collections
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
 
 import numpy as np
 
@@ -52,7 +52,7 @@ class Detection:
     language_probability: float
     audio_duration_s: float
     transcribe_ms: int
-    reference: Optional[dict] = None
+    reference: dict | None = None
     verses: list[dict] = field(default_factory=list)
     translation: str = "KJV"
 
@@ -128,13 +128,13 @@ class STTPipeline:
 
     def __init__(self,
                  whisper,                              # WhisperEngine
-                 on_detection: Optional[DetectionCallback] = None,
+                 on_detection: DetectionCallback | None = None,
                  *,
                  translation: str = "KJV",
                  max_segment_seconds: float = 30.0,
                  vad_threshold: float = 0.3,
                  debug: bool = False,
-                 on_diagnostic: Optional[DiagnosticCallback] = None):
+                 on_diagnostic: DiagnosticCallback | None = None):
         self.whisper = whisper
         self.on_detection = on_detection or (lambda d: None)
         self.translation = translation
@@ -147,7 +147,7 @@ class STTPipeline:
         self._mic = None
         self._vad = None
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop_evt = threading.Event()
 
         # Diagnostics counters (reset on each start)
@@ -157,11 +157,11 @@ class STTPipeline:
 
     # ---- lifecycle ----
 
-    def start(self, device: Optional[int | str] = None) -> None:
+    def start(self, device: int | str | None = None) -> None:
         if self._running:
             return
         # Lazy imports to keep test machines without sounddevice/silero free.
-        from app.stt.audio import MicrophoneStream, BLOCK_SIZE, SAMPLE_RATE
+        from app.stt.audio import SAMPLE_RATE, MicrophoneStream
         from app.stt.vad import SpeechDetector
 
         self._mic = MicrophoneStream(device=device)

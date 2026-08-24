@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 import queue
-from typing import Optional
 
 import numpy as np
 
@@ -60,11 +59,11 @@ def _resample_linear(audio: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
 class MicrophoneStream:
     """Streams 16 kHz mono float32 chunks from a (possibly non-16k) mic."""
 
-    def __init__(self, device: Optional[int | str] = None,
+    def __init__(self, device: int | str | None = None,
                  sample_rate: int = SAMPLE_RATE,
                  block_size: int = BLOCK_SIZE,
-                 native_sample_rate: Optional[int] = None,
-                 native_channels: Optional[int] = None):
+                 native_sample_rate: int | None = None,
+                 native_channels: int | None = None):
         self.device = device
         self.sample_rate = sample_rate            # output rate (16k)
         self.block_size = block_size              # output block size (512)
@@ -186,12 +185,41 @@ class MicrophoneStream:
             self._stream = None
         logger.info("Mic capture stopped")
 
-    def get_chunk(self, timeout: float = 1.0) -> Optional[np.ndarray]:
-        """Block until a 512-sample 16 kHz chunk is available."""
+    def __enter__(self) -> MicrophoneStream:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.stop()
+
+    def get_chunk(self, timeout: float = 1.0) -> np.ndarray | None:
+        """Block until a 512-sample 16 kHz chunk is available.
+
+        Returns None if no chunk arrived within `timeout` seconds, which
+        the pipeline treats as "mic is quiet", not as an error.
+        """
         try:
             return self._queue.get(timeout=timeout)
         except queue.Empty:
             return None
+
+    # `read` is the name the CLI tools use; keep both so either spelling
+    # works and neither breaks when the other is refactored.
+    read = get_chunk
+
+    @property
+    def dropped_chunks(self) -> int:
+        """Chunks discarded because the consumer fell behind."""
+        return self._dropped
+
+    @property
+    def queue_depth(self) -> int:
+        """Chunks currently waiting to be consumed."""
+        return self._queue.qsize()
+
+    @property
+    def is_running(self) -> bool:
+        return self._stream is not None
 
     @property
     def native_sample_rate(self) -> int:

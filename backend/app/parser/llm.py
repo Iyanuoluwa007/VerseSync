@@ -14,7 +14,6 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
 
 from app.parser.types import ParseContext, ParsedRef
 
@@ -84,7 +83,7 @@ def is_available() -> bool:
     return _breaker.can_call()
 
 
-def llm_parse(text: str, context: Optional[ParseContext] = None) -> Optional[ParsedRef]:
+def llm_parse(text: str, context: ParseContext | None = None) -> ParsedRef | None:
     """Call Groq Llama 3.3 to parse a reference. Returns None on failure.
 
     Errors are swallowed -- the caller treats this as a soft fallback
@@ -147,7 +146,7 @@ def llm_parse(text: str, context: Optional[ParseContext] = None) -> Optional[Par
     )
 
 
-def _coerce_response(raw: str) -> Optional[dict]:
+def _coerce_response(raw: str) -> dict | None:
     """Validate and normalise the JSON the model returned."""
     raw = raw.strip()
     if not raw or raw == "null":

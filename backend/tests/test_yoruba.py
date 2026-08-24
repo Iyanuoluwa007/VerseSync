@@ -10,7 +10,6 @@ from app.parser.parser import parse
 from app.parser.types import ParseContext
 from app.parser.yoruba import looks_yoruba, normalize_yoruba
 
-
 # ============================================================
 # Direct normaliser tests -- output is a string, before regex.
 # ============================================================

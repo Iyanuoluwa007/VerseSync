@@ -7,10 +7,10 @@ expressed as "from verse N to M" / "verses N through M".
 import pytest
 
 from app.parser.english_spoken import (
-    looks_english_spoken, normalize_english_spoken,
+    looks_english_spoken,
+    normalize_english_spoken,
 )
 from app.parser.parser import parse
-
 
 # ============================================================
 # Direct normaliser tests

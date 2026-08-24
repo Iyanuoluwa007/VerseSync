@@ -116,7 +116,7 @@ BOOK_MAX_CHAPTERS: dict[str, int] = {
     "1PE": 5,  "2PE": 3,  "1JN": 5,  "2JN": 1,  "3JN": 1,
     "JUD": 1,  "REV": 22,
 }
-assert set(BOOK_MAX_CHAPTERS.keys()) == set(b.code for b in BOOKS), \
+assert set(BOOK_MAX_CHAPTERS.keys()) == {b.code for b in BOOKS}, \
     "BOOK_MAX_CHAPTERS missing/extra entries"
 
 

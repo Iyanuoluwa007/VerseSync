@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -26,9 +25,9 @@ for noisy in ("httpcore", "httpx", "filelock", "huggingface_hub.file_download"):
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(name)s] %(message)s")
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "backend"))
-
+# Adds backend/ to sys.path and forces UTF-8 console output so
+# Yoruba scripture can be printed on a default Windows console.
+from _bootstrap import ROOT  # noqa: F401  (import for side effects)
 
 MODELS = [
     ("whisper-large-v3",       "large-v3",       "~3.0 GB"),
@@ -45,7 +44,7 @@ def _banner(text: str, char: str = "=") -> None:
 def _preload_one(label: str, faster_whisper_name: str, size: str,
                   index: int, total: int) -> tuple[bool, float, str]:
     print(f"[{index}/{total}] Downloading {label} ({size})...")
-    print(f"        Watch for the huggingface_hub progress bar below.")
+    print("        Watch for the huggingface_hub progress bar below.")
     t0 = time.time()
     try:
         from app.stt.whisper_engine import WhisperEngine
@@ -85,7 +84,7 @@ def main() -> int:
             print(f"[OK]   {label} ready in {elapsed:.1f}s\n")
         elif err == "cancelled by user":
             print(f"[!]    {label} cancelled after {elapsed:.1f}s.")
-            print(f"       Run again to resume; partial files are cached.")
+            print("       Run again to resume; partial files are cached.")
             return 130
         else:
             print(f"[ERR]  {label} failed after {elapsed:.1f}s: {err}\n")

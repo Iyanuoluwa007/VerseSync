@@ -1,0 +1,44 @@
+# Normalise line endings so a repo cloned on Windows and a repo cloned on
+# Linux contain the same bytes.
+* text=auto eol=lf
+
+# Files that MUST keep LF regardless of platform. A shell script checked
+# out with CRLF fails on Linux with "bad interpreter: no such file or
+# directory", which is a confusing way to discover a line-ending problem.
+*.sh        text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+*.md        text eol=lf
+*.css       text eol=lf
+*.js        text eol=lf
+*.html      text eol=lf
+*.sql       text eol=lf
+*.usfm      text eol=lf
+.gitignore  text eol=lf
+.env.example text eol=lf
+
+# PowerShell is happy either way, but CRLF is the Windows convention and
+# these scripts only ever run there.
+*.ps1       text eol=crlf
+
+# Binary: never touch these.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.ico       binary
+*.zip       binary
+*.db        binary
+*.onnx      binary
+*.bin       binary
+*.wav       binary
+*.mp4       binary
+
+# Keep generated and vendored content out of language statistics and
+# collapsed in pull request diffs.
+docs/**            linguist-documentation
+backend/tests/**   linguist-detectable

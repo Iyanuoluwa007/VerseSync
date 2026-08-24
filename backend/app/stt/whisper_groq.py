@@ -23,7 +23,6 @@ import os
 import threading
 import time
 import wave
-from typing import Optional
 
 import numpy as np
 
@@ -67,7 +66,7 @@ class GroqWhisperEngine:
     def __init__(self,
                  model: str = "whisper-large-v3-turbo",
                  language: str = "en",
-                 api_key: Optional[str] = None,
+                 api_key: str | None = None,
                  timeout: float = 30.0):
         if model not in AVAILABLE_GROQ_MODELS:
             raise ValueError(f"Unknown Groq STT model {model!r}. "
@@ -87,7 +86,7 @@ class GroqWhisperEngine:
         logger.info("GroqWhisperEngine ready (model=%s, language=%s)",
                     model, self.language)
 
-    def _validate_language(self, lang: str) -> Optional[str]:
+    def _validate_language(self, lang: str) -> str | None:
         if lang not in VALID_LANGUAGES:
             raise ValueError(f"Unsupported language {lang!r}; "
                              f"expected one of {sorted(VALID_LANGUAGES)}")
@@ -111,7 +110,7 @@ class GroqWhisperEngine:
         wav_bytes = _audio_to_wav_bytes(audio, sample_rate=16000)
 
         # Lazy import for error class
-        from groq import BadRequestError, APIError  # type: ignore
+        from groq import APIError, BadRequestError  # type: ignore
 
         t0 = time.time()
         try:

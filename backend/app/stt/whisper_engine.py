@@ -20,7 +20,6 @@ import logging
 import os
 import threading
 import time
-from typing import Optional
 
 import numpy as np
 
@@ -35,7 +34,7 @@ class WhisperEngine:
     def __init__(self,
                  model_size: str = "medium",
                  device: str = "cuda",
-                 compute_type: Optional[str] = None,
+                 compute_type: str | None = None,
                  language: str = "en"):
         if compute_type is None:
             compute_type = "float16" if device == "cuda" else "int8"
@@ -60,7 +59,7 @@ class WhisperEngine:
         # transcribe calls so the WS endpoint and CLI can't collide.
         self._lock = threading.Lock()
 
-    def _validate_language(self, lang: str) -> Optional[str]:
+    def _validate_language(self, lang: str) -> str | None:
         if lang not in VALID_LANGUAGES:
             raise ValueError(f"Unsupported language {lang!r}; "
                              f"expected one of {sorted(VALID_LANGUAGES)}")

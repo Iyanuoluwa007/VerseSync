@@ -26,11 +26,10 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "backend"))
-
+# Adds backend/ to sys.path and forces UTF-8 console output so
+# Yoruba scripture can be printed on a default Windows console.
+from _bootstrap import ROOT  # noqa: F401  (import for side effects)
 
 # --------------------------------------------------------------
 # Logging: keep the console focused on pipeline events. Quieting
@@ -141,7 +140,7 @@ def _build_engine(args, whisper_lang: str):
     print(f"[*] Loading Whisper {args.model} on {args.device}...")
     if args.language == "yo" and not args.model.startswith("large"):
         print(f"[!] Whisper '{args.model}' has weak Yoruba support.")
-        print(f"    Prefer:  --engine tiered  (or --engine groq)")
+        print("    Prefer:  --engine tiered  (or --engine groq)")
     return WhisperEngine(
         model_size=args.model,
         device=args.device,
@@ -292,8 +291,8 @@ def main() -> int:
             break
     else:
         if mic_id is not None:
-            print(f"[!] STTPipeline.start accepts no device kwarg; "
-                  f"using system default mic.", file=sys.stderr)
+            print("[!] STTPipeline.start accepts no device kwarg; "
+                  "using system default mic.", file=sys.stderr)
 
     try:
         pipeline.start(**start_kwargs)

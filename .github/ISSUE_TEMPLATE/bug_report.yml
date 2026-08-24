@@ -1,0 +1,95 @@
+name: Bug report
+description: Something does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. If this is a **security** problem, please
+        use private vulnerability reporting instead of this form.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead?
+      placeholder: |
+        I said "Romans eight twenty-eight" and nothing appeared on the
+        overlay, but /parse returns the right reference.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of VerseSync?
+      options:
+        - Projector overlay / OBS Browser Source
+        - OBS WebSocket control
+        - Reference parser (English)
+        - Reference parser (Yoruba)
+        - Speech to text / microphone
+        - Bible engine (verse lookup, ingest)
+        - API / server
+        - Setup and installation
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: VerseSync version
+      description: The `version` field from `GET /` on your server.
+      placeholder: "0.5.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and Python version
+      placeholder: "Windows 11, Python 3.12.4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: obs
+    attributes:
+      label: OBS setup (if relevant)
+      description: >
+        OBS version, whether OBS runs on the same machine as VerseSync,
+        which integration you are using (Browser Source, WebSocket,
+        Virtual Camera, Window Capture), and your canvas resolution.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and endpoint output
+      description: >
+        Server log lines around the failure. For capture problems, also
+        paste `GET /stt/status`. For overlay problems, paste
+        `GET /projector/state` and open the overlay with `?debug=1` to
+        see its connection badge.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have removed any API keys or passwords from the logs above
+          required: true
+        - label: I searched existing issues for this problem
+          required: true

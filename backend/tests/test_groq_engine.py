@@ -14,11 +14,10 @@ import numpy as np
 import pytest
 
 from app.stt.whisper_groq import (
-    GroqWhisperEngine,
     AVAILABLE_GROQ_MODELS,
+    GroqWhisperEngine,
     _audio_to_wav_bytes,
 )
-
 
 # ============================================================
 # WAV encoding

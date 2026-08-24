@@ -1,6 +1,22 @@
+# VerseSync runtime dependencies.
+#
+# This is the "projector-only" profile: the API, the Bible engine, the
+# reference parser and the OBS Browser Source overlay. It installs in
+# seconds and needs no GPU. Live microphone transcription is a separate
+# install -- see requirements-stt.txt.
+
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.9.2
 python-dotenv==1.0.1
+
+# Used directly by app/obs/client.py to speak obs-websocket v5. It also
+# arrives via uvicorn[standard], but this module imports it by name, so
+# it is declared rather than relied upon transitively.
+websockets>=13,<16
+
+# Groq client for the LLM parser fallback and the hosted Whisper engine.
 groq==0.13.0
+
+# Audio buffers and the microphone resampler.
 numpy>=1.24,<3

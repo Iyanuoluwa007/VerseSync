@@ -21,7 +21,6 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -35,7 +34,7 @@ class TierAttempt:
     backend: str            # "local:large-v3", "cloud:whisper-large-v3", etc.
     success: bool
     elapsed_s: float
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class TieredWhisperEngine:
@@ -107,8 +106,8 @@ class TieredWhisperEngine:
         backend = f"local:{model_size}"
         self._say(f"[*] [{label}] Loading {model_size} on {device}  "
                   f"({size_hint} on first run)...")
-        self._say(f"    First run downloads the model; subsequent runs "
-                  f"reuse the cache.")
+        self._say("    First run downloads the model; subsequent runs "
+                  "reuse the cache.")
         t0 = time.time()
         try:
             from app.stt.whisper_engine import WhisperEngine
@@ -129,7 +128,7 @@ class TieredWhisperEngine:
             self._record_attempt(label, backend, False, elapsed, err)
             self._say(f"[!] [{label}] {model_size} failed after "
                       f"{elapsed:.1f}s: {err}")
-            self._say(f"    Falling through to next tier...")
+            self._say("    Falling through to next tier...")
             return False
 
         elapsed = time.time() - t0
@@ -185,7 +184,7 @@ class TieredWhisperEngine:
     # ------------------------------------------------------------------
 
     def _record_attempt(self, label: str, backend: str, success: bool,
-                         elapsed: float, error: Optional[str] = None) -> None:
+                         elapsed: float, error: str | None = None) -> None:
         self.attempts.append(TierAttempt(
             label=label, backend=backend, success=success,
             elapsed_s=elapsed, error=error,

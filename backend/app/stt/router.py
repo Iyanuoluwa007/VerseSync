@@ -4,123 +4,129 @@ Endpoints:
     POST /stt/start         start the mic + whisper pipeline
     POST /stt/stop          stop the pipeline
     POST /stt/language      switch language (en / yo / auto) per session
-    GET  /stt/status        running flag + current language + queue depth
+    GET  /stt/status        running flag + current language + engine info
     GET  /stt/devices       list input-capable audio devices
     WS   /ws/transcripts    push channel for live detections
 
-Whisper is a heavyweight import (~10s for medium model load), so it
-loads lazily on the first /stt/start call. Subsequent restarts reuse
-the loaded engine.
+Whisper is a heavyweight import (a large model can take tens of seconds
+to load), so it loads lazily on the first /stt/start call. Subsequent
+restarts reuse the loaded engine.
+
+The WebSocket channel is shared with the projector overlay via
+`app.core.events.hub`, so an OBS Browser Source that reconnects mid-
+service is immediately re-sent the verse currently on screen.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from app.stt.pipeline import Detection, STTPipeline
+from app.core.events import hub
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["stt"])
 
 
-# --- Connection manager (broadcast hub for WS clients) ---
-
-class ConnectionManager:
-    def __init__(self):
-        self._connections: list[WebSocket] = []
-
-    async def connect(self, ws: WebSocket) -> None:
-        await ws.accept()
-        self._connections.append(ws)
-        logger.info("WS connected; total=%d", len(self._connections))
-
-    def disconnect(self, ws: WebSocket) -> None:
-        if ws in self._connections:
-            self._connections.remove(ws)
-        logger.info("WS disconnected; total=%d", len(self._connections))
-
-    async def broadcast(self, payload: dict) -> None:
-        dead: list[WebSocket] = []
-        for ws in list(self._connections):
-            try:
-                await ws.send_json(payload)
-            except Exception:
-                dead.append(ws)
-        for d in dead:
-            self.disconnect(d)
-
-    @property
-    def count(self) -> int:
-        return len(self._connections)
-
-
-_manager = ConnectionManager()
-
-
 # --- Pipeline singleton (lazy-loaded on first start) ---
 
-_pipeline: Optional[STTPipeline] = None
+_pipeline: Any = None
 _pipeline_lock = asyncio.Lock()
-_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+VALID_LANGUAGES = ("en", "yo", "auto")
 
 
-def _on_detection_threadsafe(detection: Detection) -> None:
-    """Bridge: pipeline thread -> WebSocket broadcast on the main loop."""
-    if _event_loop is None:
-        return
-    payload = detection.to_dict()
-    asyncio.run_coroutine_threadsafe(
-        _manager.broadcast(payload), _event_loop
-    )
+def _on_detection_threadsafe(detection: Any) -> None:
+    """Bridge: pipeline worker thread -> asyncio broadcast."""
+    hub.publish_threadsafe(detection.to_dict())
 
 
-# --- Request/response models ---
+def _engine_info(pipeline: Any) -> dict[str, Any]:
+    """Describe the active STT engine.
+
+    Uses getattr throughout: the three engines (local faster-whisper,
+    Groq cloud, tiered) deliberately expose slightly different
+    attributes, and /stt/status must not 500 because a cloud engine has
+    no `device`.
+    """
+    whisper = getattr(pipeline, "whisper", None)
+    if whisper is None:
+        return {}
+    return {
+        "language": getattr(whisper, "language", None),
+        "model_size": getattr(whisper, "model_size", None),
+        "device": getattr(whisper, "device", None),
+        "backend": getattr(whisper, "active_backend", None),
+    }
+
+
+# --- Request models ---
 
 class StartRequest(BaseModel):
     language: str = Field("en", description="en | yo | auto")
-    translation: str = Field("KJV", description="Translation code for verse fetch")
-    device: Optional[int | str] = Field(None, description="Audio device id")
+    translation: str = Field("KJV", min_length=2, max_length=8,
+                             description="Translation code for verse fetch")
+    device: int | str | None = Field(None, description="Audio device id or name")
 
 
 class LanguageRequest(BaseModel):
-    language: str
+    language: str = Field(..., description="en | yo | auto")
+
+
+def _validate_language(language: str) -> str:
+    if language not in VALID_LANGUAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported language {language!r}. "
+                   f"Use one of {list(VALID_LANGUAGES)}.",
+        )
+    return language
 
 
 # --- Endpoints ---
 
 @router.post("/stt/start")
-async def stt_start(req: StartRequest):
-    global _pipeline, _event_loop
+async def stt_start(req: StartRequest) -> dict[str, Any]:
+    global _pipeline
+
+    _validate_language(req.language)
 
     async with _pipeline_lock:
-        if _pipeline and _pipeline.is_running:
-            return {"status": "already_running",
-                    "language": _pipeline.whisper.language}
+        if _pipeline is not None and _pipeline.is_running:
+            return {
+                "status": "already_running",
+                **_engine_info(_pipeline),
+                "translation": _pipeline.translation,
+            }
 
-        # Capture the running event loop for thread->coro bridging.
-        _event_loop = asyncio.get_running_loop()
+        # The hub normally binds the loop at startup; rebind defensively
+        # in case the app was mounted into another server.
+        hub.bind_loop(asyncio.get_running_loop())
 
         if _pipeline is None:
             try:
-                from app.stt.whisper_engine import build_from_env, WhisperEngine
-                # Build a fresh engine each first-start, honouring env overrides.
-                whisper = build_from_env()
-                whisper.set_language(req.language)
+                from app.stt.pipeline import STTPipeline
+                from app.stt.whisper_engine import build_from_env
             except ImportError as exc:
                 raise HTTPException(
                     status_code=503,
                     detail=f"STT dependencies not installed: {exc}. "
-                           "Install with: pip install -r requirements-stt.txt",
-                )
+                           "Install with: "
+                           "pip install -r backend/requirements-stt.txt",
+                ) from exc
+            try:
+                whisper = build_from_env()
+                whisper.set_language(req.language)
             except Exception as exc:
                 logger.exception("Whisper load failed")
-                raise HTTPException(status_code=500,
-                                    detail=f"Whisper load failed: {exc}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Whisper load failed: {exc}",
+                ) from exc
             _pipeline = STTPipeline(
                 whisper,
                 on_detection=_on_detection_threadsafe,
@@ -131,78 +137,118 @@ async def stt_start(req: StartRequest):
             _pipeline.translation = req.translation.upper()
 
         try:
-            _pipeline.start(device=req.device)
+            # start() opens PortAudio and can block for a moment; keep it
+            # off the event loop so the server stays responsive.
+            await asyncio.to_thread(_pipeline.start, req.device)
         except Exception as exc:
             logger.exception("Pipeline start failed")
-            raise HTTPException(status_code=500,
-                                detail=f"Pipeline start failed: {exc}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Pipeline start failed: {exc}") from exc
 
-    return {
-        "status": "started",
-        "language": _pipeline.whisper.language,
-        "translation": _pipeline.translation,
-        "model_size": _pipeline.whisper.model_size,
-        "device": _pipeline.whisper.device,
-    }
+        return {
+            "status": "started",
+            **_engine_info(_pipeline),
+            "translation": _pipeline.translation,
+        }
 
 
 @router.post("/stt/stop")
-async def stt_stop():
-    if _pipeline is None or not _pipeline.is_running:
-        return {"status": "not_running"}
-    _pipeline.stop()
-    return {"status": "stopped"}
+async def stt_stop() -> dict[str, Any]:
+    async with _pipeline_lock:
+        if _pipeline is None or not _pipeline.is_running:
+            return {"status": "not_running"}
+        # stop() joins the worker thread; do not block the event loop.
+        await asyncio.to_thread(_pipeline.stop)
+        return {"status": "stopped"}
 
 
 @router.post("/stt/language")
-async def stt_set_language(req: LanguageRequest):
-    if _pipeline is None:
-        raise HTTPException(status_code=400,
-                            detail="Pipeline not initialised; call /stt/start first")
-    _pipeline.whisper.set_language(req.language)
-    # Switching language usually means a new train of thought -- reset context.
-    _pipeline.reset_context()
-    return {"status": "language_set", "language": _pipeline.whisper.language}
+async def stt_set_language(req: LanguageRequest) -> dict[str, Any]:
+    _validate_language(req.language)
+    async with _pipeline_lock:
+        if _pipeline is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Pipeline not initialised; call /stt/start first",
+            )
+        _pipeline.whisper.set_language(req.language)
+        # A language switch usually means a new train of thought, so the
+        # "next chapter" context no longer applies.
+        _pipeline.reset_context()
+        return {"status": "language_set",
+                "language": _pipeline.whisper.language}
 
 
 @router.get("/stt/status")
-async def stt_status():
+async def stt_status() -> dict[str, Any]:
     return {
-        "running": _pipeline.is_running if _pipeline else False,
-        "language": _pipeline.whisper.language if _pipeline else None,
-        "translation": _pipeline.translation if _pipeline else None,
-        "ws_clients": _manager.count,
+        "running": bool(_pipeline is not None and _pipeline.is_running),
         "model_loaded": _pipeline is not None,
+        "translation": _pipeline.translation if _pipeline else None,
+        "ws_clients": hub.client_count,
+        **(_engine_info(_pipeline) if _pipeline else {}),
     }
 
 
 @router.get("/stt/devices")
-async def stt_devices():
+async def stt_devices() -> dict[str, Any]:
     """List input-capable audio devices."""
     try:
         from app.stt.audio import MicrophoneStream
-        return {"devices": MicrophoneStream.list_devices()}
     except ImportError as exc:
-        raise HTTPException(status_code=503,
-                            detail=f"sounddevice not installed: {exc}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"sounddevice not installed: {exc}. Install with: "
+                   "pip install -r backend/requirements-stt.txt",
+        ) from exc
+    try:
+        devices = await asyncio.to_thread(MicrophoneStream.list_devices)
+    except Exception as exc:
+        # PortAudio raises on machines with no audio subsystem at all
+        # (headless CI, some containers). That is a 503, not a crash.
+        raise HTTPException(
+            status_code=503,
+            detail=f"Could not enumerate audio devices: {exc}",
+        ) from exc
+    return {"devices": devices}
 
 
 @router.websocket("/ws/transcripts")
-async def ws_transcripts(ws: WebSocket):
-    """Live push channel. Sends Detection JSON on every speech segment.
+async def ws_transcripts(ws: WebSocket) -> None:
+    """Live push channel for detections.
 
-    Clients can send anything; we ignore it (we just keep the connection
-    open). This is the channel the projector view subscribes to.
+    This is the channel the projector overlay subscribes to. On connect
+    the hub replays the verse currently on screen, so a Browser Source
+    that reloads mid-service comes back showing the right thing.
+
+    Clients may send anything; inbound content is ignored and exists
+    only as a keepalive.
     """
-    await _manager.connect(ws)
+    await hub.connect(ws)
     try:
-        # Greeting so clients know the link is alive.
-        await ws.send_json({"type": "connected", "ws_clients": _manager.count})
         while True:
-            # Drain pings from client; ignore content.
             await ws.receive_text()
     except WebSocketDisconnect:
-        _manager.disconnect(ws)
+        hub.disconnect(ws)
     except Exception as exc:
-        logger.warning("WS error: %s", exc)
-        _manager.disconnect(ws)
+        logger.debug("WS closed: %s", exc)
+        hub.disconnect(ws)
+
+
+async def shutdown_pipeline() -> None:
+    """Stop the pipeline on application shutdown.
+
+    Called from the app lifespan. Without it, Ctrl+C leaves PortAudio
+    holding the input device open until the process is killed.
+    """
+    global _pipeline
+    if _pipeline is None:
+        return
+    try:
+        if _pipeline.is_running:
+            await asyncio.to_thread(_pipeline.stop)
+    except Exception:
+        logger.exception("Error stopping STT pipeline during shutdown")
+    finally:
+        _pipeline = None

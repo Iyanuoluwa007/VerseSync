@@ -26,7 +26,6 @@ from __future__ import annotations
 import re
 import unicodedata
 
-
 # Yoruba ordinal numerals 1..30. Multiple spellings per number because
 # diacritics in spoken speech (and STT output) are unreliable.
 # Source: Yoruba Wikibooks ordinal table; cross-checked against BMYO
@@ -112,17 +111,6 @@ YORUBA_ORDINAL_BOOKS: list[tuple[str, str, int]] = [
     ("1CH", "kronika", 1), ("2CH", "kronika", 2),
 ]
 
-# Pre-compute reverse map: int -> set of ordinal spellings, for the
-# book-suffix step.
-_INT_TO_ORDINALS: dict[int, list[str]] = {}
-for _ord, _val in YORUBA_ORDINAL_TO_INT.items():
-    _INT_TO_ORDINALS.setdefault(_val, []).append(_ord)
-
-# Sort ordinal table so we always try the LONGEST spelling first; this
-# prevents "keji" prefix-matching inside "kejila" etc.
-_SORTED_ORDINALS = sorted(YORUBA_ORDINAL_TO_INT.items(),
-                          key=lambda kv: (-len(kv[0]), kv[0]))
-
 # Yoruba range word: "si" = "to". Don't be too aggressive -- "si" is
 # also a common Yoruba word elsewhere, so we only treat it as a range
 # marker when sandwiched between digits (after the ordinal pass).
@@ -133,6 +121,59 @@ def _strip_diacritics(s: str) -> str:
     """ASCII-fold for matching when STT drops tone marks."""
     nfkd = unicodedata.normalize("NFKD", s)
     return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+# ---------------------------------------------------------------------
+# Pre-compiled rewrite tables.
+#
+# The first implementation ran one `re.sub` per (book, ordinal) pair and
+# per (marker, ordinal) pair -- roughly 3,900 regex substitutions for a
+# single line of Yoruba speech, on the live transcription thread. Every
+# rule below is now a single compiled alternation applied once: the same
+# transformation in 5 passes instead of ~3,900.
+#
+# Alternatives are ordered longest-first so the longest spelling wins at
+# any given position ("kejila" is preferred over "keji").
+# ---------------------------------------------------------------------
+
+def _alt(words) -> str:
+    """Alternation source string, longest spelling first."""
+    uniq = sorted(set(words), key=lambda w: (-len(w), w))
+    return "|".join(re.escape(w) for w in uniq)
+
+
+# ASCII-folded ordinal spelling -> integer. normalize_yoruba() folds its
+# input first, so every lookup here is on plain ASCII.
+_ORDINAL_ASCII: dict[str, int] = {}
+for _word, _value in YORUBA_ORDINAL_TO_INT.items():
+    _ORDINAL_ASCII.setdefault(_strip_diacritics(_word).lower(), _value)
+
+_ORD_ALT = _alt(_ORDINAL_ASCII)
+
+# ASCII-folded Yoruba book name -> the ordinals it legitimately takes.
+# "johanu" takes 1/2/3; "korinti" only 1/2. An ordinal outside the set is
+# left alone rather than silently producing a book that does not exist.
+_BOOK_ORDINALS: dict[str, set[int]] = {}
+for _code, _book, _ordinal in YORUBA_ORDINAL_BOOKS:
+    _BOOK_ORDINALS.setdefault(
+        _strip_diacritics(_book).lower(), set()).add(_ordinal)
+
+_BOOK_ALT = _alt(_BOOK_ORDINALS)
+
+# Step 1: "johanu kini" -> "1 johanu"
+_BOOK_SUFFIX_RX = re.compile(rf"\b({_BOOK_ALT})\s+({_ORD_ALT})\b")
+
+# Step 2: "ori keta" / "ese kerin" -> the bare digit.
+# `[\s\-]*` keeps the original tolerance for "ori-keta" and "oriketa".
+_MARKER_ORDINAL_RX = re.compile(rf"\b(?:ori|ese)[\s\-]*({_ORD_ALT})\b")
+
+# Step 3: mixed-language speech -- "ori 3 ese 4" -> "3 4".
+_MARKER_DIGIT_RX = re.compile(r"\b(?:ori|ese)\s+(\d{1,3})\b")
+
+# Step 4: "4 si keje" -> "4-7" (range word followed by a spoken ordinal).
+_RANGE_ORDINAL_RX = re.compile(rf"\b(\d{{1,3}})\s+si\s+({_ORD_ALT})\b")
+
+_WS_RX = re.compile(r"\s+")
 
 
 def normalize_yoruba(text: str) -> str:
@@ -148,68 +189,52 @@ def normalize_yoruba(text: str) -> str:
     # finds them.
     out = _strip_diacritics(text).lower()
 
-    # Step 1: book-suffix ordinals.  "Johanu kini" -> "1 Johanu"
-    # We try each (book, ordinal) pair; longer ordinal spellings first.
-    for ord_word, _ in _SORTED_ORDINALS:
-        for code, book_yor, ordinal_val in YORUBA_ORDINAL_BOOKS:
-            if YORUBA_ORDINAL_TO_INT.get(ord_word) != ordinal_val:
-                continue
-            # ASCII-strip the patterns to match the ASCII-stripped text.
-            book_ascii = _strip_diacritics(book_yor).lower()
-            ord_ascii = _strip_diacritics(ord_word).lower()
-            pattern = rf"\b{re.escape(book_ascii)}\s+{re.escape(ord_ascii)}\b"
-            replacement = f"{ordinal_val} {book_ascii}"
-            out = re.sub(pattern, replacement, out)
+    # Step 1: book-suffix ordinals.  "Johanu kini" -> "1 johanu"
+    def _book_suffix(m: re.Match[str]) -> str:
+        book, ordinal = m.group(1), m.group(2)
+        value = _ORDINAL_ASCII[ordinal]
+        if value not in _BOOK_ORDINALS.get(book, ()):
+            return m.group(0)   # e.g. "johanu kefa" -- there is no 6 John
+        return f"{value} {book}"
 
-    # Step 2: "Ori" + ordinal -> chapter digit
-    #         "Ese" + ordinal -> verse digit
-    for ord_word, value in _SORTED_ORDINALS:
-        ord_ascii = _strip_diacritics(ord_word).lower()
-        out = re.sub(
-            rf"\b(?:ori)[\s\-]*{re.escape(ord_ascii)}\b",
-            f" {value} ",
-            out,
-        )
-        out = re.sub(
-            rf"\b(?:ese)[\s\-]*{re.escape(ord_ascii)}\b",
-            f" {value} ",
-            out,
-        )
+    out = _BOOK_SUFFIX_RX.sub(_book_suffix, out)
 
-    # Step 3: "Ori" / "Ese" followed by a bare digit (mixed-language
-    # speech: "ori 3 ese 4")
-    out = re.sub(r"\b(?:ori)\s+(\d{1,3})\b", r" \1 ", out)
-    out = re.sub(r"\b(?:ese)\s+(\d{1,3})\b", r" \1 ", out)
+    # Step 2: "ori"/"ese" + ordinal -> chapter/verse digit.
+    out = _MARKER_ORDINAL_RX.sub(
+        lambda m: f" {_ORDINAL_ASCII[m.group(1)]} ", out)
+
+    # Step 3: "ori"/"ese" + a bare digit (mixed-language speech).
+    out = _MARKER_DIGIT_RX.sub(r" \1 ", out)
 
     # Step 4: Yoruba range word "si" connecting verses.
-    # First convert "<digit> si <ordinal>" -> "<digit> - <digit>" since
-    # bare ordinals after "si" weren't preceded by ese/ori.
-    for ord_word, value in _SORTED_ORDINALS:
-        ord_ascii = _strip_diacritics(ord_word).lower()
-        out = re.sub(
-            rf"\b(\d{{1,3}})\s+si\s+{re.escape(ord_ascii)}\b",
-            rf"\1-{value}",
-            out,
-        )
-    # Then handle the all-digit form ("4 si 7" -> "4-7").
+    # "<digit> si <ordinal>" first -- a bare ordinal after "si" was never
+    # preceded by ese/ori, so step 2 did not convert it.
+    out = _RANGE_ORDINAL_RX.sub(
+        lambda m: f"{m.group(1)}-{_ORDINAL_ASCII[m.group(2)]}", out)
+    # Then the all-digit form ("4 si 7" -> "4-7").
     out = _RANGE_WORD_RX.sub(r"\1-\2", out)
 
     # Collapse whitespace
-    out = re.sub(r"\s+", " ", out).strip()
-    return out
+    return _WS_RX.sub(" ", out).strip()
+
+
+# Marker words that make the Yoruba pass worth running. Every entry is
+# ASCII-folded, because `looks_yoruba` folds its input before matching --
+# an accented spelling here (the old table had "kọrinti" and "tẹsalonika")
+# could never fire, since folding turns the input into "korinti".
+_YORUBA_MARKER_RX = re.compile(
+    r"\b(?:ori|ese|kini|keji|keta|kerin|karun|kefa|keje|kejo|kesan|kewa|"
+    r"johanu|korinti|saamu|romu|ifihan|matiu|marku|luku|tesalonika|"
+    r"timotiu|peteru|samueli|kronika|akoko)\b"
+)
 
 
 def looks_yoruba(text: str) -> bool:
     """Cheap heuristic: does this string contain Yoruba marker words?
 
-    Used to decide whether to run the (somewhat expensive) Yoruba pass
-    in the parser pipeline. False positives are OK -- the normaliser is
-    a no-op on pure-English text. We only want to skip the work when
-    nothing Yoruba-looking is present.
+    Used to decide whether to run the Yoruba pass in the parser
+    pipeline. False positives are OK -- the normaliser is a no-op on
+    pure-English text. We only want to skip the work when nothing
+    Yoruba-looking is present.
     """
-    lower = _strip_diacritics(text).lower()
-    return bool(re.search(r"\b(?:ori|ese|kini|keji|keta|kerin|karun|"
-                          r"kefa|keje|kejo|kesan|kewa|johanu|kọrinti|"
-                          r"korinti|saamu|romu|ifihan|matiu|marku|luku|"
-                          r"tesalonika|tẹsalonika|timotiu|peteru|akoko|"
-                          r"akọkọ)\b", lower))
+    return bool(_YORUBA_MARKER_RX.search(_strip_diacritics(text).lower()))

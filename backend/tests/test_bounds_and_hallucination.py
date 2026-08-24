@@ -13,10 +13,9 @@ These guard against two real failures we hit in live use:
 """
 import pytest
 
-from app.bible.books import is_valid_chapter, BOOK_MAX_CHAPTERS
+from app.bible.books import BOOK_MAX_CHAPTERS, is_valid_chapter
 from app.parser.parser import parse
 from app.stt.pipeline import _is_hallucinated_transcript
-
 
 # ============================================================
 # Bounds check

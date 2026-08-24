@@ -1,6 +1,6 @@
 """Integration tests for the Bible engine: schema -> seed -> query."""
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -17,7 +17,7 @@ def conn():
     seed_books(c)
 
     # Insert a translation row + a few verses
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     c.execute(
         """INSERT INTO translations
                 (code, name, language, license, copyright, source_url, ingested_at)
@@ -81,6 +81,7 @@ def test_get_passage_inverted_returns_empty(conn):
 def test_full_book_name_resolves_via_lexicon():
     """Endpoint should accept 'Genesis' as well as 'GEN'."""
     from fastapi.testclient import TestClient
+
     from app.main import app
     client = TestClient(app)
     # We don't actually need to hit the DB -- a 404 with a "USFM code"

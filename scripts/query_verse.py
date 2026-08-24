@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import argparse
 import re
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+# Adds backend/ to sys.path and forces UTF-8 console output so
+# Yoruba scripture can be printed on a default Windows console.
+from _bootstrap import ROOT  # noqa: F401  (import for side effects)
 
-from app.bible.query import get_passage, get_verse, list_translations  # noqa: E402
+from app.bible.query import get_passage, get_verse, list_translations
 
 
 def parse_ref(ref: str) -> tuple[int, int, int | None]:

@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest something VerseSync should be able to do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: >
+        Describe the situation, not the solution. What happens during a
+        service that VerseSync makes harder than it should be?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Projector overlay / themes
+        - OBS integration
+        - Reference parsing
+        - Speech to text
+        - Translations (see docs/BACKLOG.md)
+        - Operator tooling
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead
+      description: Workarounds you use now, and why they are not enough.
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Fit with the project
+      options:
+        - label: This does not require a Bible translation to be committed to the repo
+        - label: If it needs a new dependency, I have said so above and why
+        - label: This degrades safely if the feature is unavailable mid-service
