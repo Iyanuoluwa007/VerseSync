@@ -107,8 +107,12 @@ RULES: tuple[Rule, ...] = (
          display_surface=True, action="bible.verse"),
     Rule(_rx(r"/passage/.*"), _GET, ROLE_PROJECTOR,
          display_surface=True, action="bible.passage"),
-    Rule(_rx(r"/projector/obs-url"), _GET, ROLE_OPERATOR,
-         action="projector.obs_url"),
+    # A display surface, not a control one. It returns the Browser Source
+    # URL and a handful of constants -- nothing sensitive -- and it is
+    # the documented FIRST step of OBS setup, so gating it behind a token
+    # blocks it at exactly the moment you have not got one yet.
+    Rule(_rx(r"/projector/obs-url"), _GET, ROLE_PROJECTOR,
+         display_surface=True, action="projector.obs_url"),
 
     # ---- control: everything that changes state or spends money ----
     Rule(_rx(r"/projector/show"), _WRITE, ROLE_OPERATOR,

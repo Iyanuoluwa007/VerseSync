@@ -4,6 +4,18 @@ All notable changes to VerseSync. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html); it is pre-1.0,
 so minor versions may still change behaviour.
 
+## [0.6.2] - 2026-08-24
+
+### Fixed
+
+- `GET /projector/obs-url` required an operator token, which blocked it at
+  exactly the wrong moment: it is the documented **first step** of OBS
+  setup, run before you have approved any device. It returns a URL built
+  from the Host header plus a few constants and nothing else, and
+  `/projector/config` beside it was already public, so it is now a
+  display surface like the rest of the read-only projector endpoints. A
+  test asserts it exposes no PIN, hash, key or OBS password.
+
 ## [0.6.1] - 2026-08-24
 
 ### Changed
@@ -231,6 +243,7 @@ ingest and FTS5, the scripture reference parser (regex, Yoruba lexicon
 and Groq LLM fallback), and the STT pipeline (faster-whisper, Silero VAD,
 `sounddevice` capture).
 
+[0.6.2]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.2
 [0.6.1]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.5.0

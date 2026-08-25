@@ -599,8 +599,19 @@ def test_display_surfaces_stay_public(client):
     """An OBS Browser Source cannot send an Authorization header."""
     client.post("/auth/setup-pin", json={"pin": GOOD_PIN})
     for path in ("/projector", "/projector/static/projector.js",
-                 "/projector/config", "/translations"):
+                 "/projector/config", "/translations",
+                 # The documented first step of OBS setup. Gating this
+                 # blocks setup at the point you have no token yet.
+                 "/projector/obs-url"):
         assert client.get(path).status_code == 200, path
+
+
+def test_obs_url_helper_leaks_nothing(client):
+    """It is public, so it must not expose configuration or secrets."""
+    client.post("/auth/setup-pin", json={"pin": GOOD_PIN})
+    body = client.get("/projector/obs-url").text
+    for secret in (GOOD_PIN, "pin_hash", "signing_key", "OBS_WS_PASSWORD"):
+        assert secret not in body
 
 
 def test_display_surfaces_can_be_locked_down(client, monkeypatch):

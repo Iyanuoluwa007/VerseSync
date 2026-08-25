@@ -529,7 +529,7 @@ ruff check .
 cd backend && pytest
 ```
 
-**583 tests**, running in about 20 seconds, with no network access and no
+**584 tests**, running in about 20 seconds, with no network access and no
 Bible database required — every test that needs verses builds its own
 temporary one — including the auth database, so the suite cannot be
 affected by whether you have set a PIN on your own install. Groq and OBS
