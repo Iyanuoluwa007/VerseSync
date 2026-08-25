@@ -63,6 +63,13 @@ STT extras installed.
 - **The suite must pass with no Bible database present.** Build a
   temporary one in a fixture, as `tests/test_projector.py` does.
 
+## Testing what CI cannot
+
+CI has no microphone, no GPU and no OBS. If you have any of those,
+[docs/TESTING.md](docs/TESTING.md) lists exactly what still needs a human
+and what a correct result looks like. Reporting a failure from that list
+is one of the most useful contributions available right now.
+
 ## Things that are especially welcome
 
 - **Yoruba accuracy.** Whisper mishears Yoruba word boundaries

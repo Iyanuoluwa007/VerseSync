@@ -544,6 +544,11 @@ CI runs the suite on Windows and Linux across Python 3.11-3.13, plus a
 secret scan and a check that the app still starts without the optional
 STT dependencies installed.
 
+Automated tests cannot cover the parts that need a microphone, a GPU or a
+real OBS install. **[docs/TESTING.md](docs/TESTING.md)** is the manual
+test plan for those, in priority order, with the commands to run and what
+you should see.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 ## Troubleshooting
