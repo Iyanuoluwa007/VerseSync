@@ -94,9 +94,10 @@ license text is available at the URL above.
 
 ## A note on copyrighted translations not bundled
 
-The following translations are commonly requested but cannot be
-bundled in a free, redistributable application due to commercial
-licensing restrictions:
+VerseSync is free and has no paid tier. The reason these translations are
+missing is not a product decision on our part -- it is that their
+copyright holders do not license them for redistribution in an
+open-source application:
 
 - **NIV** — Biblica, Inc.
 - **ESV** — Crossway Bibles
@@ -105,6 +106,8 @@ licensing restrictions:
 - **NASB** — The Lockman Foundation
 - **NKJV** — Thomas Nelson, Inc.
 
-VerseSync supports these via per-user API.Bible accounts in a future
-release; users supply their own API key and accept the upstream
-license terms.
+If you hold a licence for one of these, a future release is intended to
+let you plug in your own account (for example via API.Bible) so the text
+comes from the rights holder under terms you have agreed with them.
+VerseSync would charge nothing for that; it simply cannot ship the text
+itself.

@@ -8,6 +8,8 @@
 *.key
 *.p12
 *.pfx
+ADMIN_PIN.txt
+.devtokens.json
 secrets.json
 credentials.json
 *_credentials*

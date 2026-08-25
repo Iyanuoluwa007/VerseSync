@@ -7,10 +7,13 @@
 Voice-activated scripture projection for live services and streams,
 with a built-in OBS Studio overlay. English and Yorùbá.
 
+**Free and open source. No paid tier, no feature gates, ever.**
+
 [![CI](https://github.com/Iyanuoluwa007/VerseSync/actions/workflows/ci.yml/badge.svg)](https://github.com/Iyanuoluwa007/VerseSync/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![Free forever](https://img.shields.io/badge/free-forever-2ea44f.svg)](#license)
 
 [Quick start](#quick-start) ·
 [OBS integration](#obs-studio-integration) ·
@@ -69,18 +72,47 @@ Yorùbá, the verse appears on the projector and in the stream on its own.
   the screen is the product, and nothing optional is allowed to
   interrupt it.
 
-## Screenshots
+## What it looks like
 
-> **Placeholder.** Screenshots and a demo GIF of the overlay in OBS have
-> not been captured yet. To generate your own, follow the
-> [quick start](#quick-start), push a verse with `/projector/show`, and
-> screenshot the OBS preview.
+The real overlay, captured from a running server in Chromium — the same
+engine an OBS Browser Source uses. Regenerate them yourself any time with
+`python scripts/capture_screenshots.py`.
 
-| | |
-|---|---|
-| `theme=lowerthird` over a camera | _placeholder_ |
-| `theme=caption` | _placeholder_ |
-| `theme=fullscreen` | _placeholder_ |
+<img src="docs/images/overlay-lowerthird.png" alt="The lowerthird theme showing Romans 8:28-30 in the KJV over a stage-lit background" width="100%">
+
+<p align="center"><em><code>theme=lowerthird</code> — the default. A panel in the bottom-left, sized to leave the preacher visible.</em></p>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/overlay-caption.png" alt="The caption theme showing Psalm 23:1 as a full-width strip along the bottom of the frame"></td>
+<td width="50%"><img src="docs/images/overlay-fullscreen.png" alt="The fullscreen theme showing John 3:16 as large centred text on a dark background"></td>
+</tr>
+<tr>
+<td align="center"><em><code>theme=caption</code> — a broadcast-style strip.</em></td>
+<td align="center"><em><code>theme=fullscreen</code> — for a scene with no camera behind it.</em></td>
+</tr>
+</table>
+
+<img src="docs/images/overlay-yoruba.png" alt="The lowerthird theme showing John 3:16 in Yoruba, with tone marks and dotted characters rendering correctly" width="100%">
+
+<p align="center"><em>Yorùbá, with tone marks and sub-dots intact — the reason the project exists.</em></p>
+
+<details>
+<summary><b>Proof the background is really transparent</b></summary>
+
+<br>
+
+<img src="docs/images/overlay-transparent.png" alt="The same overlay captured with no background at all, showing the transparent alpha channel around the panel" width="100%">
+
+The same overlay captured with `omit_background`, so everything outside
+the panel is genuine alpha. This is what OBS composites over your camera:
+no chroma key, no black box.
+
+</details>
+
+> The background behind the overlay in these shots is a gradient drawn in
+> code by the capture script, standing in for a camera feed. It is not a
+> photograph of anyone's service.
 
 ## Technology stack
 
@@ -497,10 +529,12 @@ ruff check .
 cd backend && pytest
 ```
 
-**580 tests**, running in about 20 seconds, with no network access and no
+**583 tests**, running in about 20 seconds, with no network access and no
 Bible database required — every test that needs verses builds its own
-temporary one. Groq and OBS are covered with fakes, and the auth suite
-includes `alg: none` and wrong-key token forgeries.
+temporary one — including the auth database, so the suite cannot be
+affected by whether you have set a PIN on your own install. Groq and OBS
+are covered with fakes, and the auth suite includes `alg: none` and
+wrong-key token forgeries.
 
 Most of that runtime is deliberate: the admin PIN is hashed with scrypt
 tuned to roughly 100 ms per verification, and the auth tests exercise it
@@ -638,11 +672,28 @@ not covered**. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
+**VerseSync is free, and every feature is available to everyone.** There
+is no paid tier, no licence key, no hosted plan, no feature held back.
+Use it in your church, fork it, sell services around it, ship it inside
+something else. That is what the MIT licence is for.
+
 Source code: [MIT](LICENSE).
 
 The bundled Bible translations are **separately licensed** and are not
-covered by the MIT license. The Yorùbá text is CC BY-SA 4.0 with a
+covered by the MIT licence. The Yorùbá text is CC BY-SA 4.0 with a
 trademark requirement. See [LICENSES.md](LICENSES.md).
+
+Some well-known translations (NIV, ESV, NLT and others) are missing not
+because of anything VerseSync charges for, but because their copyright
+holders do not license them for redistribution in an open-source
+application. See [docs/BACKLOG.md](docs/BACKLOG.md).
+
+**Running costs are yours and optional.** VerseSync itself never bills
+you. Local Whisper and the bundled Bibles cost nothing at all. The only
+thing that can cost money is if *you* choose to use Groq for cloud
+transcription or the LLM parser fallback, billed by Groq directly on your
+own key. Leave `GROQ_API_KEY` unset and the whole system runs free and
+offline.
 
 ## Acknowledgements
 

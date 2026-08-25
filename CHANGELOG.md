@@ -4,6 +4,37 @@ All notable changes to VerseSync. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html); it is pre-1.0,
 so minor versions may still change behaviour.
 
+## [0.6.1] - 2026-08-24
+
+### Changed
+
+- **VerseSync is explicitly free, with no paid tier.** The earlier docs
+  framed translations as "free tier" and "paid tier", which described a
+  business model that no longer exists. That split was never about
+  payment to this project in the first place: it is the difference
+  between texts whose licences permit redistribution and texts whose
+  copyright holders do not. `docs/BACKLOG.md`, `LICENSES.md` and the
+  README now say so plainly, and the README states that the only thing
+  that can ever cost money is your own optional Groq key, billed by Groq.
+
+### Added
+
+- **Real screenshots** of the overlay in the README, captured from a
+  running server in Chromium (the engine an OBS Browser Source uses) --
+  all four themes plus a transparency proof, replacing the placeholders.
+- `scripts/capture_screenshots.py`, so they can be regenerated after any
+  theme change rather than going stale.
+
+### Fixed
+
+- **The test suite depended on the developer's real database.** Setting an
+  admin PIN on a live install made 16 tests fail and one hang forever:
+  the middleware found a configured database, started returning 401 to
+  `/projector/show`, and a WebSocket test waited for a broadcast that was
+  never coming. CI never caught it because CI has no PIN set. Every test
+  now gets an isolated database via `tests/conftest.py`, and a collected
+  test fails if a new module reads `settings` without being isolated.
+
 ## [0.6.0] - 2026-08-24
 
 Phase 0 / Module 5: the auth foundation. Phase 0 is now complete.
@@ -200,5 +231,6 @@ ingest and FTS5, the scripture reference parser (regex, Yoruba lexicon
 and Groq LLM fallback), and the STT pipeline (faster-whisper, Silero VAD,
 `sounddevice` capture).
 
+[0.6.1]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.5.0

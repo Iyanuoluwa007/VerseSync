@@ -346,6 +346,24 @@ or a Stream Deck if the preacher goes off-script.
 
 ---
 
+## Regenerating the screenshots
+
+The images in the README are captured from a real running server, not
+mocked up. To regenerate them (after a theme change, say):
+
+```bash
+pip install playwright && python -m playwright install chromium
+```
+
+```bash
+python scripts/capture_screenshots.py --token <operator device token>
+```
+
+Drop `--token` if you have not set an admin PIN. Add `--width 1920
+--height 1080` for full-resolution captures.
+
+---
+
 ## Troubleshooting
 
 **The Browser Source is blank.**

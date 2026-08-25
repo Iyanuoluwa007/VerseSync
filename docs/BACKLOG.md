@@ -3,7 +3,12 @@
 Tracker for translations to add beyond the current bundled set.
 Bundled today: KJV, WEB (English) + YOR / BMYO (Yoruba).
 
-## Free tier candidates (public domain or open-licensed)
+VerseSync is free, and every feature is available to everyone. The split
+below is **not** a product tier: it is the difference between texts whose
+licences let us redistribute them and texts whose copyright holders do
+not. Nothing here is gated behind payment to this project.
+
+## Can be bundled (public domain or open-licensed)
 
 ### English
 
@@ -25,7 +30,12 @@ Bundled today: KJV, WEB (English) + YOR / BMYO (Yoruba).
 | ----------- | --------------------------------- | -------------- | ----- |
 | YOR1884     | Crowther 1884 (original)          | Public domain  | Foundational. Clean text harder to source -- Bible Society of Nigeria's 1960 revision (BYCV) is what most digital "Crowther" texts actually are. |
 
-## Paid-tier / commercial (require API.Bible or per-user keys)
+## Cannot be bundled (copyright holders do not permit redistribution)
+
+These are commonly requested but their publishers do not license them for
+redistribution in an open-source application. If you want one, you would
+need your own account with the rights holder or an aggregator such as
+API.Bible; the cost, if any, is theirs, not ours.
 
 ### English
 
