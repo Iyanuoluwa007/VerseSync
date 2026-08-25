@@ -266,14 +266,19 @@ Where the delay comes from, on the local-Whisper path:
 | Stage | Typical | Notes |
 |---|---|---|
 | Voice activity detection closes a segment | ~0.5 s | `min_silence_duration_ms`, waits for the preacher to pause |
-| Whisper transcription | 0.3-3 s | Depends heavily on model size and GPU vs CPU |
+| Whisper transcription | 0.24-0.35 s on a mid-range GPU | Measured on an RTX 4060: `large-v3` 0.33 s and `large-v3-turbo` 0.24 s for a 5 s segment, warm. Markedly slower on CPU. |
 | Reference parsing | under 1 ms | Measured; see the performance notes in the README |
 | Verse lookup | ~1 ms | Local SQLite |
 | WebSocket to overlay | a few ms | Same machine |
 
-So a verse typically appears **one to four seconds** after the reference
-is spoken. That is inherent to waiting for a complete utterance before
-transcribing it, not something VerseSync adds on top.
+So a verse typically appears **one to two seconds** after the reference is
+spoken on a machine with a GPU, and longer on CPU. Almost all of that is
+the VAD waiting for the preacher to pause: everything after it -- parse,
+lookup, broadcast -- is under 2 ms combined. Transcription is not the
+bottleneck on a GPU, so a faster model buys you very little.
+
+Model load happens once at startup, not per verse: `large-v3` takes about
+7 s to load and `large-v3-turbo` about 2.5 s, from a warm cache.
 
 **If that offset bothers you on a recorded stream,** delay the *video*
 to match rather than trying to speed up the overlay:

@@ -44,7 +44,7 @@ So you don't spend time on ground already covered:
 
 | Verified | How |
 |---|---|
-| 583 automated tests | Run on Windows and Linux, Python 3.11/3.12/3.13 in CI |
+| 591 automated tests | Run on Windows and Linux, Python 3.11/3.12/3.13 in CI |
 | Bible download and ingest | Real run: 93,287 verses, 66 books × 3 translations, 7.7 s |
 | CLI verse lookup, including Yorùbá | Ran `query_verse.py` for KJV/WEB/YOR |
 | Every HTTP endpoint | Live server, real responses |
@@ -64,9 +64,15 @@ The gap is everything below.
 
 ## Priority 1 — the live audio path
 
-**None of this has ever been run.** No microphone or GPU was available.
-The VAD fix, the `--test-mic` fix and the pipeline changes are covered by
-unit tests with fakes, but no real audio has gone through this build.
+The plumbing is now proven on this machine: the STT stack installs,
+`--test-mic` captures, both large models load on the RTX 4060, and the
+full pipeline runs mic → VAD → Whisper → parser. The Silero fix was
+confirmed against the real model at exactly 1.00 inference per chunk.
+
+**What has never happened is somebody speaking into it.** Everything
+below that involves actual speech — detection accuracy, VAD boundaries
+around real utterances, Yorùbá — is still unverified, and that is the
+part that decides whether this works on a Sunday.
 
 ### 1.1 Install the STT stack
 
@@ -74,13 +80,11 @@ unit tests with fakes, but no real audio has gone through this build.
 .\setup.ps1 -WithSTT
 ```
 
-- [ ] Completes without error.
+- [x] Completes without error. **Done:** installed cleanly on Python 3.13.
 
-**Watch for:** `numpy` resolves to 2.x here, and `faster-whisper` /
-`torch` have historically been fussy about that. If you get a binary
-incompatibility error mentioning numpy, pin `numpy<2` in
-`backend/requirements-stt.txt` and tell me — that is a real finding and
-the pin belongs in the repo.
+**Resolved:** numpy 2.5.2 works with faster-whisper 1.1.0,
+CTranslate2 4.8.1 and torch 2.13. The compatibility risk flagged in the
+audit did not materialise, so no pin is needed.
 
 ### 1.2 Microphone enumeration
 
@@ -88,8 +92,7 @@ the pin belongs in the repo.
 python scripts/listen.py --list-devices
 ```
 
-- [ ] Your microphone appears, with a sensible channel count and sample rate.
-- [ ] Note its id for the next step.
+- [x] Your microphone appears. **Done:** Realtek(R) Audio, use `--mic 1`.
 
 ### 1.3 Microphone capture — the fix I could not test
 
@@ -101,7 +104,7 @@ This command was **completely broken** before this audit (it raised
 `AttributeError: __enter__` immediately). This is the first real run of
 the fix.
 
-- [ ] It runs for 15 seconds instead of crashing.
+- [x] It runs for 15 seconds instead of crashing. **Done:** 464 chunks in 15 s.
 - [ ] Speaking moves `rms` above **0.005**. Silence sits near 0.001.
 - [ ] The final line reports roughly **470 chunks** captured in 15 s.
 
@@ -176,17 +179,23 @@ markedly better at Yorùbá than a local `medium`.
 
 ### 1.7 Engine fallback
 
-```bash
-python scripts/preload_models.py
-```
-
-- [ ] Both models download, progress bars visible.
+> **Already verified on this machine.** Both large models were present
+> and complete in the Hugging Face cache, `preload_models.py` confirmed
+> them in 14.7 s, and the tiered engine selected `local:large-v3` on
+> CUDA in 6.6 s. Load and inference times on the RTX 4060:
+>
+> | Model | Load | Transcribe (5 s segment, warm) |
+> |---|---|---|
+> | `large-v3` | 7.4 s | 0.33 s |
+> | `large-v3-turbo` | 2.5 s | 0.24 s |
+>
+> What remains is the fallback *behaviour*, below.
 
 ```bash
 python scripts/listen.py --engine tiered --debug
 ```
 
-- [ ] Announces which tier it landed on.
+- [x] Announces which tier it landed on.
 - [ ] `--no-cloud-fallback` stays fully local.
 - [ ] With `GROQ_API_KEY` unset, the cloud tier is skipped cleanly rather
       than erroring.
