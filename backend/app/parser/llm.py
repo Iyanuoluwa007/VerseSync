@@ -19,9 +19,29 @@ from app.parser.types import ParseContext, ParsedRef
 
 logger = logging.getLogger(__name__)
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
-TIMEOUT_S = 1.5
-MAX_TOKENS = 100
+# The model is read from the environment, not hard-coded. The previous
+# default, llama-3.3-70b-versatile, was decommissioned by Groq and every
+# fallback call started returning 404 -- silently, because the circuit
+# breaker did its job and the parser simply lost a tier. Pinning a
+# third-party model name in source with no override was the root cause.
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
+GROQ_MODEL = os.getenv("GROQ_PARSER_MODEL", "").strip() or DEFAULT_GROQ_MODEL
+
+# Measured on Groq for the default model: median 0.28 s, worst 0.43 s over
+# the parser's real fallback inputs. 3 s leaves room for a slow network
+# without stalling the pipeline; the LLM only runs when the regex and
+# Yoruba passes have both already failed.
+TIMEOUT_S = float(os.getenv("GROQ_PARSER_TIMEOUT", "3.0"))
+
+# Reasoning models spend tokens thinking before they answer. At 100 the
+# budget was consumed by reasoning and the response came back empty,
+# which Groq rejects as `json_validate_failed` with an empty generation.
+MAX_TOKENS = 1024
+
+# Keep reasoning short: this is a extraction task, not a puzzle. Sent via
+# extra_body because older groq SDK versions do not accept it as a named
+# argument, and an unknown named argument is a TypeError, not a warning.
+REASONING_EFFORT = "low"
 
 # Circuit breaker: 3 failures within the window trip it for the cooldown.
 _BREAKER_THRESHOLD = 3
@@ -72,7 +92,7 @@ Rules:
 - "book" MUST be a USFM 3-letter code: GEN EXO LEV NUM DEU JOS JDG RUT 1SA 2SA 1KI 2KI 1CH 2CH EZR NEH EST JOB PSA PRO ECC SNG ISA JER LAM EZK DAN HOS JOL AMO OBA JON MIC NAM HAB ZEP HAG ZEC MAL MAT MRK LUK JHN ACT ROM 1CO 2CO GAL EPH PHP COL 1TH 2TH 1TI 2TI TIT PHM HEB JAS 1PE 2PE 1JN 2JN 3JN JUD REV
 - "verse_end" is null for single verses, integer for ranges.
 - Use the optional last reference for context-dependent inputs like "the next chapter" or "verses 9-10".
-- If no reference can be extracted, return: null
+- If no reference can be extracted, return exactly: {"book":null}
 - Yoruba, Pidgin, and other languages are acceptable inputs."""
 
 
@@ -124,10 +144,22 @@ def llm_parse(text: str, context: ParseContext | None = None) -> ParsedRef | Non
             response_format={"type": "json_object"},
             temperature=0,
             max_tokens=MAX_TOKENS,
+            extra_body={"reasoning_effort": REASONING_EFFORT},
         )
         raw = resp.choices[0].message.content or ""
     except Exception as exc:
-        logger.warning("Groq call failed: %s", exc)
+        # A retired or misspelled model is a configuration problem, not a
+        # transient one, so say what to change instead of burying it in a
+        # generic warning the operator will never act on.
+        if "model_not_found" in str(exc) or "does not exist" in str(exc):
+            logger.error(
+                "Groq model %r is unavailable. Set GROQ_PARSER_MODEL to a "
+                "model your key can use (see https://console.groq.com/docs/models). "
+                "The parser still works without the LLM fallback.",
+                GROQ_MODEL,
+            )
+        else:
+            logger.warning("Groq call failed: %s", exc)
         _breaker.record_failure()
         return None
 

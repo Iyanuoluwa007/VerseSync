@@ -124,7 +124,7 @@ no chroma key, no black box.
 | Voice activity | [Silero VAD](https://github.com/snakers4/silero-vad) | ~5 MB ONNX; only transcribe actual speech |
 | Transcription | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2) | Local, GPU or CPU, multilingual |
 | Cloud STT fallback | Groq hosted Whisper | No 3 GB download; better Yorùbá than local `medium` |
-| Parser fallback | Groq Llama 3.3 70B | Only when regex and the Yorùbá pass both miss |
+| Parser fallback | Groq, model configurable | Only when regex and the Yorùbá pass both miss |
 | Overlay | Plain HTML/CSS/JS, no build step | An OBS machine at a church is often offline |
 | OBS control | obs-websocket v5, implemented directly | ~40 lines of handshake beats a dependency |
 | Auth | scrypt (stdlib) + PyJWT | Memory-hard hashing with no compiled dependency; an audited JWT library rather than a hand-rolled one |
@@ -529,7 +529,7 @@ ruff check .
 cd backend && pytest
 ```
 
-**584 tests**, running in about 20 seconds, with no network access and no
+**591 tests**, running in about 20 seconds, with no network access and no
 Bible database required — every test that needs verses builds its own
 temporary one — including the auth database, so the suite cannot be
 affected by whether you have set a PIN on your own install. Groq and OBS

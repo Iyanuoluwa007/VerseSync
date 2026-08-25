@@ -4,6 +4,61 @@ All notable changes to VerseSync. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html); it is pre-1.0,
 so minor versions may still change behaviour.
 
+## [0.6.3] - 2026-08-25
+
+Found by installing the STT stack and running the live pipeline for the
+first time. Nothing here was reachable by the test suite, because all of
+it depends on a real microphone, a real GPU, or a live third-party API.
+
+### Fixed
+
+- **The Groq parser fallback was calling a decommissioned model.**
+  `llama-3.3-70b-versatile` has been retired by Groq, so every fallback
+  call returned 404. It failed quietly: the circuit breaker did its job,
+  and the parser simply lost a tier with nothing louder than a warning.
+  The default is now `openai/gpt-oss-20b`, chosen by measuring the
+  candidates on the parser's real fallback inputs (5/6 correct, median
+  0.28 s; `qwen/qwen3.6-27b` scored 6/6 but peaked at 6.5 s, which would
+  blow the timeout and trip the breaker).
+- **The model is now configurable** via `GROQ_PARSER_MODEL`. Hard-coding
+  a third-party model name with no override is what turned a vendor
+  deprecation into a silent outage.
+- **The prompt asked the model to return a bare `null`.** With
+  `response_format={"type": "json_object"}` that is rejected by the API,
+  so every "no reference here" input was an error rather than a clean
+  miss. It now returns `{"book":null}`.
+- **`MAX_TOKENS` was 100.** Reasoning models spend tokens before they
+  answer, so the budget was exhausted and Groq returned an empty
+  generation reported as `json_validate_failed`. Raised to 1024, with
+  `reasoning_effort: low` to keep it brief.
+- An unavailable model now logs what to change and where, rather than a
+  generic "call failed" the operator cannot act on.
+
+### Verified on real hardware
+
+First run of the live audio path, on an RTX 4060 with a Realtek mic:
+
+- `listen.py --test-mic` works. It raised `AttributeError` on the first
+  line before this audit; it now captures 464 chunks in 15 s, confirming
+  the 44.1 kHz to 16 kHz resampling.
+- The Silero fix holds against the real model: **exactly 1.00 inference
+  per chunk**, measured by counting forward passes. It was 2.00.
+- Full pipeline end to end: Whisper loaded on CUDA in 0.9 s, VAD fired,
+  transcription in 279 ms, heartbeats at 31.4 chunks/s.
+- numpy 2.5.2 works with faster-whisper, CTranslate2 and torch. The
+  compatibility risk flagged in the audit did not materialise, so no pin
+  is needed.
+
+### Known upstream issues
+
+Neither affects correctness today; both are third-party and are recorded
+so they are not rediscovered as mysteries.
+
+- `sounddevice` 0.5.1 sets `.shape` on a numpy array, deprecated in numpy
+  2.5. Harmless now, but it is in the audio callback path and will break
+  when numpy removes it.
+- `silero-vad` 5.1.2 loads via `torch.jit.load`, deprecated in torch 2.13.
+
 ## [0.6.2] - 2026-08-24
 
 ### Fixed
@@ -243,6 +298,7 @@ ingest and FTS5, the scripture reference parser (regex, Yoruba lexicon
 and Groq LLM fallback), and the STT pipeline (faster-whisper, Silero VAD,
 `sounddevice` capture).
 
+[0.6.3]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.3
 [0.6.2]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.2
 [0.6.1]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.0

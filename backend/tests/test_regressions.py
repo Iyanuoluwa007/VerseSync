@@ -342,3 +342,106 @@ def test_lexicon_reads_yoruba_names_from_an_existing_database(tmp_path,
         assert names["JHN"] == "Ẹ̀kọ́Test"
     finally:
         lexicon_module.reset_cache()
+
+
+# ---------------------------------------------------------------------
+# 7. The Groq parser fallback was calling a decommissioned model
+#
+# GROQ_MODEL was hard-coded to llama-3.3-70b-versatile, which Groq has
+# since retired. Every fallback call returned 404, the circuit breaker
+# tripped, and the parser quietly lost a tier -- found only by running
+# the live pipeline and reading the log.
+#
+# Two further bugs surfaced with it: the prompt told the model to return
+# a bare `null`, which `response_format=json_object` rejects outright,
+# and MAX_TOKENS=100 was consumed by reasoning tokens before a reasoning
+# model could answer, producing an empty generation.
+# ---------------------------------------------------------------------
+
+def test_groq_model_is_configurable():
+    """A third-party model name pinned in source with no override is how
+    this broke. It must be settable without editing code."""
+    import importlib
+    from pathlib import Path
+
+    from app.parser import llm
+
+    assert "GROQ_PARSER_MODEL" in Path(llm.__file__).read_text(encoding="utf-8")
+    importlib.reload(llm)
+    assert llm.GROQ_MODEL == llm.DEFAULT_GROQ_MODEL
+
+
+def test_groq_model_env_override(monkeypatch):
+    import importlib
+
+    from app.parser import llm
+
+    monkeypatch.setenv("GROQ_PARSER_MODEL", "some/other-model")
+    importlib.reload(llm)
+    try:
+        assert llm.GROQ_MODEL == "some/other-model"
+    finally:
+        monkeypatch.delenv("GROQ_PARSER_MODEL", raising=False)
+        importlib.reload(llm)
+
+
+def test_retired_default_model_is_not_used():
+    from app.parser import llm
+    assert llm.DEFAULT_GROQ_MODEL != "llama-3.3-70b-versatile"
+
+
+def test_prompt_never_asks_for_a_bare_null():
+    """`response_format={"type": "json_object"}` requires an object. A
+    bare null is rejected by the API before the parser ever sees it."""
+    from app.parser.llm import _SYSTEM_PROMPT
+
+    assert "return: null" not in _SYSTEM_PROMPT
+    assert '{"book":null}' in _SYSTEM_PROMPT
+
+
+def test_no_reference_response_is_handled():
+    """The shape the prompt now asks for must resolve to 'no reference'."""
+    from app.parser.llm import _coerce_response
+
+    assert _coerce_response('{"book":null}') is None
+    assert _coerce_response('{"book": null, "chapter": null}') is None
+
+
+def test_token_budget_leaves_room_for_reasoning():
+    """At 100 the budget was spent on reasoning and Groq returned an
+    empty generation, which it reports as json_validate_failed."""
+    from app.parser.llm import MAX_TOKENS
+
+    assert MAX_TOKENS >= 512
+
+
+def test_unavailable_model_logs_an_actionable_error(monkeypatch, caplog):
+    """A retired model is a config problem. The log must say what to
+    change, not just that a call failed."""
+    import logging
+
+    from app.parser import llm
+
+    class Boom:
+        def __init__(self, *a, **k):
+            self.chat = self
+
+        @property
+        def completions(self):
+            return self
+
+        def create(self, **kwargs):
+            raise RuntimeError(
+                "Error code: 404 - {'error': {'code': 'model_not_found', "
+                "'message': 'The model does not exist'}}"
+            )
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setattr("groq.Groq", Boom)
+    llm._breaker.record_success()
+
+    with caplog.at_level(logging.ERROR):
+        assert llm.llm_parse("John three sixteen") is None
+
+    assert "GROQ_PARSER_MODEL" in caplog.text
+    llm._breaker.record_success()
