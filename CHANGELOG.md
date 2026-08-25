@@ -4,6 +4,76 @@ All notable changes to VerseSync. This project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html); it is pre-1.0,
 so minor versions may still change behaviour.
 
+## [0.6.0] - 2026-08-24
+
+Phase 0 / Module 5: the auth foundation. Phase 0 is now complete.
+
+### Added
+
+- **Admin PIN**, set once on first run, hashed with scrypt and salted per
+  install. Weak PINs (repeated digits, digit runs, breach-corpus
+  entries) are rejected with a usable message.
+- **Device registration and approval.** A device asks to join and gets a
+  6-digit code plus a powerless pending token. Someone with the PIN
+  approves the code and assigns a role. A device cannot promote itself:
+  the role it requests is recorded, the role the approver picks is
+  granted.
+- **Three roles.** `projector` receives verses, `operator` drives the
+  overlay and the STT pipeline, `admin` manages devices and OBS.
+- **Immediate revocation.** Every request re-checks the device record, so
+  `/auth/revoke-device` takes effect on the device's next request rather
+  than whenever its token expires. Changing the PIN rotates the signing
+  key and invalidates every device at once.
+- **Lockout.** 5 wrong PINs within 15 minutes locks the PIN for the rest
+  of the window, persisted in the database so restarting the server is
+  not an escape. The correct PIN is refused while locked, or the lockout
+  would not slow an attacker at all.
+- **Audit log** covering every authentication event and every
+  state-changing request, with filtering by action prefix and by actor.
+  Writes are best-effort: a failure to log can never break the request it
+  records.
+- **A single route policy table** (`app/auth/policy.py`). A route with no
+  entry is denied, so adding an endpoint without a rule produces a 403
+  rather than an accidental hole. A test asserts every route has one.
+- `VERSESYNC_DB_PATH`, to put the database somewhere other than
+  `backend/data/`.
+- `docs/AUTH.md`, and a rewritten `SECURITY.md`.
+
+### Changed
+
+- **Authentication activates when a PIN is set**, not on upgrade. An
+  existing install keeps working exactly as before until someone runs
+  `POST /auth/setup-pin`. `GET /` reports the state and warns while
+  unprotected. `VERSESYNC_REQUIRE_AUTH=true` fails closed instead.
+- **The projector display stays public by default.** An OBS Browser
+  Source cannot send an `Authorization` header and neither can a browser
+  WebSocket, so requiring one would break the OBS integration. The
+  read-only display surfaces are open unless
+  `VERSESYNC_PUBLIC_PROJECTOR=false`, which then accepts `?token=`.
+- CORS now allows the `Authorization` header, and the auth middleware
+  runs inside CORS so a 401 still carries CORS headers.
+- `is_configured()` is cached. The middleware asks it on every request,
+  and it cost a fresh SQLite connection each time: 583 us -> 0.4 us.
+
+### Fixed
+
+- `/auth/clear-lockout` originally required the admin PIN, which made it
+  useless: the PIN is exactly what a lockout disables, so it could only
+  be called when it was not needed. It now requires an approved admin
+  device instead.
+
+### Deviations from the Phase 0 plan
+
+Both deliberate, both documented in `docs/AUTH.md`:
+
+- **scrypt rather than Argon2id.** `argon2-cffi` is a compiled
+  dependency, and the base install is meant to need no build tools.
+  scrypt is RFC 7914, memory-hard, and in the standard library. The hash
+  string is self-describing, so Argon2id can be added later without a
+  migration.
+- **Tokens are validated against the database, not just verified.** The
+  plain-JWT design could not revoke a device before its token expired.
+
 ## [0.5.0] - 2026-08-24
 
 The release that makes VerseSync usable with OBS Studio, plus a
@@ -130,4 +200,5 @@ ingest and FTS5, the scripture reference parser (regex, Yoruba lexicon
 and Groq LLM fallback), and the STT pipeline (faster-whisper, Silero VAD,
 `sounddevice` capture).
 
+[0.6.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Iyanuoluwa007/VerseSync/releases/tag/v0.5.0

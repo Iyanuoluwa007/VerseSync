@@ -61,6 +61,9 @@ Yorùbá, the verse appears on the projector and in the stream on its own.
   preacher goes somewhere the parser did not follow.
 - **Three bundled translations**, two English and one Yorùbá, 93,287
   verses in local SQLite. No network call to show a verse.
+- **Access control that fits a church.** One admin PIN, devices approved
+  by reading a 6-digit code aloud, three roles, immediate revocation, and
+  an audit log of who changed what. No user accounts to administer.
 - **Degrades instead of failing.** No GPU, no internet, no Groq key, no
   OBS: each of those removes a capability and nothing else. The verse on
   the screen is the product, and nothing optional is allowed to
@@ -92,6 +95,7 @@ Yorùbá, the verse appears on the projector and in the stream on its own.
 | Parser fallback | Groq Llama 3.3 70B | Only when regex and the Yorùbá pass both miss |
 | Overlay | Plain HTML/CSS/JS, no build step | An OBS machine at a church is often offline |
 | OBS control | obs-websocket v5, implemented directly | ~40 lines of handshake beats a dependency |
+| Auth | scrypt (stdlib) + PyJWT | Memory-hard hashing with no compiled dependency; an audited JWT library rather than a hand-rolled one |
 
 ## Requirements
 
@@ -261,6 +265,40 @@ http://localhost:8000/projector?theme=caption&hold=0&fontScale=1.2
 | **Window / Display Capture** | Supported as a fallback. Use `?bg=green` with a Chroma Key filter on capture paths without alpha. |
 | **Audio/video sync** | A verse appears 1-4 s after the reference is spoken, inherent to waiting for a complete utterance. [Compensating with a stream delay](docs/OBS.md#latency-and-audiovideo-sync) is covered in the OBS guide. |
 
+## Access control
+
+Off until you switch it on:
+
+```bash
+curl -X POST http://localhost:8000/auth/setup-pin -H "Content-Type: application/json" -d "{\"pin\":\"cornerstone-77\"}"
+```
+
+Then devices join by reading a code aloud to whoever holds the PIN:
+
+```bash
+curl -X POST http://localhost:8000/auth/register-device -H "Content-Type: application/json" -d "{\"name\":\"Sanctuary booth\",\"role\":\"operator\"}"
+```
+
+```bash
+curl -X POST http://localhost:8000/auth/approve-device -H "Content-Type: application/json" -d "{\"pin\":\"cornerstone-77\",\"code\":\"584803\",\"role\":\"operator\"}"
+```
+
+The device then sends `Authorization: Bearer <token>` on every request.
+
+| Role | Can do |
+|---|---|
+| `projector` | Receive verses, read scripture. Nothing else. |
+| `operator` | Drive the overlay, the parser and the STT pipeline. |
+| `admin` | Everything, plus manage devices, read the audit log, control OBS. |
+
+Revocation takes effect on the device's **next request**, not whenever
+its token expires, because every request re-checks the device record.
+Five wrong PINs in 15 minutes locks the PIN, persisted so a restart is
+not an escape.
+
+Full walkthrough, including what to do when you lock yourself out:
+**[docs/AUTH.md](docs/AUTH.md)**.
+
 ## How it works
 
 ```
@@ -275,6 +313,7 @@ backend/app/
 ├── stt/          Mic capture -> VAD -> Whisper -> parser
 ├── projector/    The OBS Browser Source overlay
 ├── obs/          obs-websocket v5 client (optional)
+├── auth/         Admin PIN, device tokens, roles, audit log
 └── core/         Settings and the projector event hub
 ```
 
@@ -317,6 +356,9 @@ Copy `backend/.env.example` to `backend/.env`. Every value is optional.
 | `VERSESYNC_PORT` | `8000` | |
 | `VERSESYNC_DEFAULT_TRANSLATION` | `KJV` | |
 | `VERSESYNC_CORS_ORIGINS` | localhost only | Comma-separated. Empty disables CORS. |
+| `VERSESYNC_DB_PATH` | `backend/data/versesync.db` | Holds the PIN hash and signing key; keep it off network shares. |
+| `VERSESYNC_REQUIRE_AUTH` | `false` | `true` refuses protected routes until a PIN is set |
+| `VERSESYNC_PUBLIC_PROJECTOR` | `true` | `false` requires a token on the overlay too |
 | `PROJECTOR_THEME` | `lowerthird` | Default overlay theme |
 | `PROJECTOR_HOLD_SECONDS` | `12` | `0` keeps a verse up until replaced |
 | `PROJECTOR_FONT_SCALE` | `1.0` | |
@@ -455,9 +497,14 @@ ruff check .
 cd backend && pytest
 ```
 
-**490 tests**, running in about 5 seconds, with no network access and no
+**580 tests**, running in about 20 seconds, with no network access and no
 Bible database required — every test that needs verses builds its own
-temporary one. Groq and OBS are covered with fakes.
+temporary one. Groq and OBS are covered with fakes, and the auth suite
+includes `alg: none` and wrong-key token forgeries.
+
+Most of that runtime is deliberate: the admin PIN is hashed with scrypt
+tuned to roughly 100 ms per verification, and the auth tests exercise it
+for real rather than weakening the parameters.
 
 CI runs the suite on Windows and Linux across Python 3.11-3.13, plus a
 secret scan and a check that the app still starts without the optional
@@ -544,16 +591,30 @@ python scripts/download_bibles.py && python scripts/ingest_bibles.py
 
 ## Security considerations
 
-**VerseSync currently has no authentication.** Anyone who can reach the
-API can change what is on your screen and start your microphone. It is
-built to be bound to `127.0.0.1`, which is the default.
+VerseSync has an admin PIN, device tokens with roles, immediate
+revocation and an audit log. **None of it is active until you set a
+PIN** — a fresh install is open, so that upgrading cannot lock an
+operator out mid-service.
 
-Do not expose it to the internet. If OBS runs on another machine, bind to
-the LAN and treat that network as trusted, or put VerseSync behind a VPN.
+```bash
+curl -X POST http://localhost:8000/auth/setup-pin -H "Content-Type: application/json" -d "{\"pin\":\"choose-a-real-one\"}"
+```
 
-Read [SECURITY.md](SECURITY.md) for the threat model, secret handling,
-and — importantly for a church — exactly which configurations send audio
-off the machine and which do not.
+`GET /` tells you which state you are in and warns while unprotected. Set
+`VERSESYNC_REQUIRE_AUTH=true` to fail closed instead.
+
+Two things to know:
+
+- **The display path stays open by default.** An OBS Browser Source
+  cannot send an `Authorization` header, so `/projector` and
+  `/ws/transcripts` expose verse text without one. Set
+  `VERSESYNC_PUBLIC_PROJECTOR=false` and pass `?token=` to change that.
+- **There is no TLS.** On a LAN, treat the network as trusted or put
+  VerseSync behind a VPN. Do not expose it to the internet.
+
+Read [SECURITY.md](SECURITY.md) for the threat model and — importantly
+for a church — exactly which configurations send congregation audio off
+the machine and which do not.
 
 ## Roadmap
 
@@ -562,7 +623,7 @@ off the machine and which do not.
 - [x] STT pipeline: VAD, Whisper, tiered engine with cloud fallback
 - [x] OBS Browser Source overlay
 - [x] OBS WebSocket control
-- [ ] **Authentication**: admin PIN, device tokens, audit log
+- [x] Authentication: admin PIN, device tokens, roles, audit log
 - [ ] Operator dashboard: correct or override a detection live
 - [ ] Better Yorùbá recognition: `initial_prompt` biasing and
       fuzzy ordinal matching for smashed word boundaries

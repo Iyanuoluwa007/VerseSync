@@ -324,7 +324,22 @@ new default.
 `requirements.txt` for the LLM parser; everything else (numpy, wave,
 io) is stdlib.
 
-## Module 5 — Auth foundation (next)
+## Module 5 — Auth foundation (complete)
+
+Shipped in v0.6.0. Full documentation: `docs/AUTH.md`.
+
+Verified end to end against a running server: register -> approve -> use
+a protected route -> revoke (revocation effective on the next request);
+the audit log contains every step and no secrets; 5 wrong PINs inside 15
+minutes triggers the lockout, survives a restart, and refuses even the
+correct PIN while locked. 90 automated tests cover it, including
+`alg: none` and wrong-key token forgeries.
+
+Two deliberate deviations from the plan below, explained in `docs/AUTH.md`:
+scrypt instead of Argon2id (no compiled dependency), and tokens validated
+against the device record so revocation is immediate.
+
+### As originally planned
 
 - `POST /auth/setup-pin` — first-run only, sets admin PIN (Argon2id hash).
 - `POST /auth/register-device` — returns 6-digit code + pending JWT.
@@ -341,7 +356,7 @@ Verify:
 
 ## Phase 0 done when
 
-- All 5 modules have passing tests.
+- All 5 modules have passing tests.  **Done: 580 tests passing.**
 - End-to-end smoke: speak into mic, watch terminal print detected refs,
   watch audit log record the projector device joining.
 - Phase 1 (Next.js projector view) can begin.

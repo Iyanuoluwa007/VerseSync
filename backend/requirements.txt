@@ -15,6 +15,11 @@ python-dotenv==1.0.1
 # it is declared rather than relied upon transitively.
 websockets>=13,<16
 
+# Device tokens. Pure Python, no compiled extension. Used rather than a
+# hand-rolled JWT because algorithm confusion and `alg: none` are exactly
+# the kind of bug that does not announce itself.
+PyJWT==2.10.1
+
 # Groq client for the LLM parser fallback and the hosted Whisper engine.
 groq==0.13.0
 

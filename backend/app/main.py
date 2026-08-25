@@ -18,6 +18,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.auth.middleware import AuthMiddleware
+from app.auth.router import router as auth_router
 from app.bible.router import router as bible_router
 from app.core.config import settings
 from app.core.events import hub
@@ -79,15 +81,22 @@ _origins = list(settings.cors_origins)
 if settings.cors_allow_null_origin:
     _origins.append("null")
 
+# Auth first, CORS second: Starlette runs the most recently added
+# middleware outermost, so this puts CORS on the outside. A 401 then
+# still carries CORS headers, which is the difference between a browser
+# showing "unauthorised" and showing an opaque network error.
+app.add_middleware(AuthMiddleware)
+
 if _origins:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_origins,
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
+app.include_router(auth_router)
 app.include_router(bible_router)
 app.include_router(parser_router)
 app.include_router(projector_router)
@@ -110,15 +119,30 @@ else:
 
 @app.get("/", tags=["meta"])
 def health() -> dict:
-    """Liveness probe and version banner."""
-    return {
+    """Liveness probe, version banner, and auth state."""
+    from app.auth import service as auth_service
+
+    configured = auth_service.is_configured()
+    body = {
         "status": "ok",
         "service": "versesync",
         "version": __version__,
         "env": settings.env,
         "projector": "/projector",
         "docs": "/docs",
+        "auth": {
+            "configured": configured,
+            "enforcing": configured,
+            "public_projector": settings.public_projector,
+        },
     }
+    if not configured:
+        # Said plainly on the one endpoint everybody hits first.
+        body["auth"]["warning"] = (
+            "No admin PIN is set, so every endpoint is open to anyone who "
+            "can reach this server. Set one with POST /auth/setup-pin."
+        )
+    return body
 
 
 @app.get("/healthz", tags=["meta"])

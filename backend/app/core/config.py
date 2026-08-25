@@ -127,6 +127,17 @@ class Settings:
     projector_theme: str = "lowerthird"
     projector_font_scale: float = 1.0
 
+    # --- authentication (Phase 0 / Module 5) ---
+    # Auth switches on once an admin PIN is set, so upgrading an existing
+    # install does not lock its operator out mid-service.
+    # `require_auth` makes the server fail closed instead: protected
+    # routes return 503 until a PIN exists.
+    require_auth: bool = False
+    # The OBS Browser Source and browser WebSocket clients cannot send an
+    # Authorization header, so the read-only display surfaces stay open by
+    # default. Set false to require ?token= on the Browser Source URL too.
+    public_projector: bool = True
+
     # --- OBS WebSocket (obs-websocket v5) ---
     obs_ws_enabled: bool = False
     obs_ws_host: str = "127.0.0.1"
@@ -154,7 +165,13 @@ class Settings:
         rather than silently falling back to a default, so a typo in .env
         surfaces at startup instead of mid-sermon.
         """
+        # Lets the database live somewhere other than backend/data --
+        # a different drive, a RAM disk, or a throwaway file in tests.
+        db_override = os.getenv("VERSESYNC_DB_PATH", "").strip()
+        db_path = Path(db_override).expanduser().resolve() if db_override else None
+
         return cls(
+            **({"db_path": db_path} if db_path else {}),
             env=os.getenv("VERSESYNC_ENV", "development").strip() or "development",
             host=os.getenv("VERSESYNC_HOST", "127.0.0.1").strip() or "127.0.0.1",
             port=_env_int("VERSESYNC_PORT", 8000, minimum=1, maximum=65535),
@@ -172,6 +189,8 @@ class Settings:
             ),
             projector_font_scale=_env_float(
                 "PROJECTOR_FONT_SCALE", 1.0, minimum=0.3, maximum=4.0),
+            require_auth=_env_bool("VERSESYNC_REQUIRE_AUTH", False),
+            public_projector=_env_bool("VERSESYNC_PUBLIC_PROJECTOR", True),
             obs_ws_enabled=_env_bool("OBS_WS_ENABLED", False),
             obs_ws_host=os.getenv("OBS_WS_HOST", "127.0.0.1").strip() or "127.0.0.1",
             obs_ws_port=_env_int("OBS_WS_PORT", 4455, minimum=1, maximum=65535),

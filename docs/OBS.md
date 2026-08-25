@@ -148,10 +148,16 @@ microphone.
 4. Check the OBS machine can reach it: open the URL in a browser there
    first with `?debug=1` and confirm the badge reads `connected`.
 
-> **Read [SECURITY.md](../SECURITY.md) before doing this.** VerseSync has
-> no authentication. On `0.0.0.0`, anyone on that network can put text on
-> your screen and start your microphone. Use it only on a network you
-> control, and never port-forward it.
+> **Read [SECURITY.md](../SECURITY.md) before doing this.** On
+> `0.0.0.0`, anyone who can reach the port can drive VerseSync unless you
+> have set an admin PIN. Set one first:
+>
+> ```bash
+> curl -X POST http://localhost:8000/auth/setup-pin -H "Content-Type: application/json" -d "{\"pin\":\"choose-a-real-one\"}"
+> ```
+>
+> Even then there is no TLS, so use it only on a network you control and
+> never port-forward it. See [docs/AUTH.md](AUTH.md).
 
 ---
 
@@ -373,6 +379,18 @@ It should not: VerseSync replays the current verse on reconnect. Check
 **The overlay went stale after upgrading VerseSync.**
 Right-click the Browser Source and choose **Refresh**. The page itself is
 served with `no-store`, but OBS caches aggressively across restarts.
+
+**The Browser Source returns 401 after I enabled authentication.**
+Only if you also set `VERSESYNC_PUBLIC_PROJECTOR=false`. The display
+surfaces stay open by default precisely because a Browser Source cannot
+send an `Authorization` header. If you did lock them down, approve a
+device with the `projector` role and append its token to the URL:
+
+```
+http://localhost:8000/projector?token=<device token>
+```
+
+See [docs/AUTH.md](AUTH.md#locking-down-the-projector-too).
 
 **`/obs/status` says `connected: false`.**
 Check *Enable WebSocket server* is ticked in OBS, that `OBS_WS_PORT`

@@ -225,7 +225,25 @@ async def ws_transcripts(ws: WebSocket) -> None:
     Clients may send anything; inbound content is ignored and exists
     only as a keepalive.
     """
+    # Authenticated here rather than in the HTTP middleware: Starlette
+    # does not route WebSocket handshakes through BaseHTTPMiddleware, so
+    # the middleware never sees this connection.
+    from app.auth.middleware import authenticate_websocket
+
+    try:
+        principal = await authenticate_websocket(ws)
+    except PermissionError as exc:
+        # 1008 is the WebSocket "policy violation" close code. Refusing
+        # before accept() means the client sees a failed handshake rather
+        # than a connection that opens and silently receives nothing.
+        await ws.close(code=1008, reason=str(exc)[:120])
+        logger.info("Rejected projector WebSocket: %s", exc)
+        return
+
     await hub.connect(ws)
+    if principal is not None:
+        logger.info("Projector WebSocket authenticated as %s (%s)",
+                    principal.name, principal.role)
     try:
         while True:
             await ws.receive_text()

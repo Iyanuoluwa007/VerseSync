@@ -5,4 +5,4 @@ The FastAPI app, the `/` health endpoint and the docs all read it from
 here so they can never drift apart again.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
